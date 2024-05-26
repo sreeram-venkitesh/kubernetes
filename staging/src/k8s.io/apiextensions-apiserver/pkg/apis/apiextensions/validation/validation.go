@@ -46,6 +46,7 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 	"k8s.io/apiserver/pkg/cel/environment"
 	"k8s.io/apiserver/pkg/util/webhook"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -772,6 +773,11 @@ func ValidateCustomResourceDefinitionNames(names *apiextensions.CustomResourceDe
 func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceColumnDefinition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
+	klog.V(1).Info(col)
+	fmt.Printf("%+v\n", col)
+	klog.V(1).Info(col.JSONPath)
+	klog.V(1).Info(col.CEL)
+
 	if len(col.Name) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("name"), ""))
 	}
@@ -786,10 +792,18 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("format"), col.Format, fmt.Sprintf("must be one of %s", strings.Join(customResourceColumnDefinitionFormats.List(), ","))))
 	}
 
-	if len(col.JSONPath) == 0 {
-		allErrs = append(allErrs, field.Required(fldPath.Child("JSONPath"), ""))
-	} else if errs := validateSimpleJSONPath(col.JSONPath, fldPath.Child("JSONPath")); len(errs) > 0 {
-		allErrs = append(allErrs, errs...)
+	if len(col.JSONPath) == 0 && len(col.CEL) == 0 {
+		allErrs = append(allErrs, field.Required(fldPath.Child("JSONPath or CEL"), "either JSONPath or CEL must be specified"))
+	}
+
+	if len(col.JSONPath) != 0 {
+		if errs := validateSimpleJSONPath(col.JSONPath, fldPath.Child("jsonPath")); len(errs) > 0 {
+			allErrs = append(allErrs, errs...)
+		}
+	}
+
+	if len(col.CEL) != 0 {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("cel"), col.CEL, "CEL expression not implemented"))
 	}
 
 	return allErrs

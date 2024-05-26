@@ -47,13 +47,25 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 	}
 
 	for _, col := range crdColumns {
-		path := jsonpath.New(col.Name)
-		if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
-			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+		var path *jsonpath.JSONPath
+		var err error
+
+		if col.JSONPath != "" {
+			path = jsonpath.New(col.Name)
+			err = path.Parse(fmt.Sprintf("{%s}", col.JSONPath))
+		} else if col.CEL != "" {
+			path = jsonpath.New(col.Name)
+			err = path.Parse(fmt.Sprintf("{%s}", col.CEL))
+		} else {
+			return c, fmt.Errorf("column definition must have either JSONPath or CEL: %q", col.Name)
 		}
+
+		if err != nil {
+			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+	}
 		path.AllowMissingKeys(true)
 
-		desc := fmt.Sprintf("Custom resource definition column (in JSONPath format): %s", col.JSONPath)
+		desc := fmt.Sprintf("Custom resource definition column: %s", col.JSONPath)
 		if len(col.Description) > 0 {
 			desc = col.Description
 		}

@@ -286,6 +286,8 @@ type CustomResourceColumnDefinition struct {
 	// JSONPath is a simple JSON path (i.e. with array notation) which is evaluated against
 	// each custom resource to produce the value for this column.
 	JSONPath string `json:"JSONPath" protobuf:"bytes,6,opt,name=JSONPath"`
+
+	CEL string `json:"cel,omitempty" protobuf:"bytes,7,opt,name=cel"`
 }
 
 // CustomResourceDefinitionNames indicates the names to serve this CustomResourceDefinition
