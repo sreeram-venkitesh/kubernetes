@@ -254,6 +254,9 @@ type CustomResourceColumnDefinition struct {
 
 	// JSONPath is a simple JSON path, i.e. without array notation.
 	JSONPath string
+
+	// CEL
+	Cel string
 }
 
 // CustomResourceDefinitionNames indicates the names to serve this CustomResourceDefinition

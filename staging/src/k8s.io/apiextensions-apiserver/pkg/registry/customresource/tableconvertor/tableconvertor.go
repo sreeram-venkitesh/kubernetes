@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"k8s.io/klog/v2"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -46,12 +47,20 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		headers: headers,
 	}
 
+	klog.V(1).Info("Inside tableconvertor New function")
+	klog.V(1).Info(c)
+
 	for _, col := range crdColumns {
+		klog.V(1).Info(col)
 		path := jsonpath.New(col.Name)
+		klog.V(1).Info(path)
+		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
 		if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
 			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
 		}
 		path.AllowMissingKeys(true)
+
+		klog.V(1).Info(path)
 
 		desc := fmt.Sprintf("Custom resource definition column (in JSONPath format): %s", col.JSONPath)
 		if len(col.Description) > 0 {
@@ -68,6 +77,8 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		})
 	}
 
+	klog.V(1).Info("Final c before returning")
+	klog.V(1).Info(c)
 	return c, nil
 }
 
