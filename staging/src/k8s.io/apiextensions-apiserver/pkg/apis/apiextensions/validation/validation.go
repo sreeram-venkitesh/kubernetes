@@ -810,6 +810,10 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 		allErrs = append(allErrs, errs...)
 	}
 
+	if len(col.Cel) == 0 {
+		allErrs = append(allErrs, field.Required(fldPath.Child("Cel"), ""))
+	}
+
 	return allErrs
 }
 
