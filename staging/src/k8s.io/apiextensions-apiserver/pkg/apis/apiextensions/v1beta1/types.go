@@ -287,7 +287,7 @@ type CustomResourceColumnDefinition struct {
 	// each custom resource to produce the value for this column.
 	JSONPath string `json:"JSONPath,omitempty" protobuf:"bytes,6,opt,name=JSONPath"`
 
-	Cel string `json:"Cel,omitempty" protobuf:"bytes,7,opt,name=Cel"`
+	Expression string `json:"expression,omitempty" protobuf:"bytes,7,opt,name=expression"`
 }
 
 // CustomResourceDefinitionNames indicates the names to serve this CustomResourceDefinition
