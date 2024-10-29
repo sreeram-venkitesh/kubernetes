@@ -256,7 +256,7 @@ type CustomResourceColumnDefinition struct {
 	JSONPath string
 
 	// CEL
-	Cel string
+	Expression string
 }
 
 // CustomResourceDefinitionNames indicates the names to serve this CustomResourceDefinition
