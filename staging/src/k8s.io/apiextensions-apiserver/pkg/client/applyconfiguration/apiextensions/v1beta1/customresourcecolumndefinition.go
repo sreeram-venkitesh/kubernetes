@@ -27,7 +27,7 @@ type CustomResourceColumnDefinitionApplyConfiguration struct {
 	Description *string `json:"description,omitempty"`
 	Priority    *int32  `json:"priority,omitempty"`
 	JSONPath    *string `json:"JSONPath,omitempty"`
-	Cel         *string `json:"Cel,omitempty"`
+	Expression  *string `json:"expression,omitempty"`
 }
 
 // CustomResourceColumnDefinitionApplyConfiguration constructs a declarative configuration of the CustomResourceColumnDefinition type for use with
@@ -84,10 +84,10 @@ func (b *CustomResourceColumnDefinitionApplyConfiguration) WithJSONPath(value st
 	return b
 }
 
-// WithCel sets the Cel field in the declarative configuration to the given value
+// WithExpression sets the Expression field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Cel field is set to the value of the last call.
-func (b *CustomResourceColumnDefinitionApplyConfiguration) WithCel(value string) *CustomResourceColumnDefinitionApplyConfiguration {
-	b.Cel = &value
+// If called multiple times, the Expression field is set to the value of the last call.
+func (b *CustomResourceColumnDefinitionApplyConfiguration) WithExpression(value string) *CustomResourceColumnDefinitionApplyConfiguration {
+	b.Expression = &value
 	return b
 }
