@@ -105,7 +105,7 @@ message CustomResourceColumnDefinition {
   // each custom resource to produce the value for this column.
   optional string JSONPath = 6;
 
-  optional string Cel = 7;
+  optional string expression = 7;
 }
 
 // CustomResourceConversion describes how to convert different versions of a CR.
