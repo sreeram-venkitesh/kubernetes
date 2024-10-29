@@ -277,7 +277,7 @@ func autoConvert_v1beta1_CustomResourceColumnDefinition_To_apiextensions_CustomR
 	out.Description = in.Description
 	out.Priority = in.Priority
 	out.JSONPath = in.JSONPath
-	out.Cel = in.Cel
+	out.Expression = in.Expression
 	return nil
 }
 
@@ -293,7 +293,7 @@ func autoConvert_apiextensions_CustomResourceColumnDefinition_To_v1beta1_CustomR
 	out.Description = in.Description
 	out.Priority = in.Priority
 	out.JSONPath = in.JSONPath
-	out.Cel = in.Cel
+	out.Expression = in.Expression
 	return nil
 }
 
