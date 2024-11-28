@@ -805,7 +805,7 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 	}
 
 	if len(col.Expression) > 0 && len(col.JSONPath) > 0 {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("expression"), fmt.Sprintf("both expression and jsonPATH cannot      be set at the same time.")))
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("expression"), col.Name, fmt.Sprintf("both expression and jsonPATH cannot be set at the same time.")))
 	} else if len(col.Expression) == 0 && len(col.JSONPath) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("expression"), fmt.Sprintf("Either expression or jsonPATH needs to be set. Both cannot be unset at the same time.")))
 	} else if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
@@ -814,7 +814,7 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 			allErrs = append(allErrs, errs...)
 		}
 	} else {
-		errs := validateSimpleJSONPath(col.Expression, fldPath.Child("Expression"))
+		errs := validateSimpleJSONPath(col.Expression, fldPath.Child("expression"))
 		if len(errs) > 0 {
 			allErrs = append(allErrs, errs...)
 		}
