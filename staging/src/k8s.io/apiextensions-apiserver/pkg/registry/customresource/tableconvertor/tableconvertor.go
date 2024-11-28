@@ -55,8 +55,15 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		path := jsonpath.New(col.Name)
 		klog.V(1).Info(path)
 		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
-		if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
-			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.Expression)))
+		if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
+			if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+			}
+		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
+			if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
+			}
 		}
 		path.AllowMissingKeys(true)
 
