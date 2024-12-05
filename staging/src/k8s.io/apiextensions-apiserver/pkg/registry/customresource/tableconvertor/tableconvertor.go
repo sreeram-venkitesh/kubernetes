@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"k8s.io/klog/v2"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -46,12 +47,30 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		headers: headers,
 	}
 
+	klog.V(1).Info("Inside tableconvertor New function")
+	klog.V(1).Info(c)
+
 	for _, col := range crdColumns {
+		klog.V(1).Info(col)
 		path := jsonpath.New(col.Name)
-		if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
-			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+		klog.V(1).Info(path)
+		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
+		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.Expression)))
+		// TODO (Sreeram/Priyanka): Comment-Nov28
+		// We need to add the CEL compilation logic bit here in place of JSONPath parsing when dealing with col.Expression 
+		if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
+			if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+			}
+		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
+			if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
+			}
 		}
+		// END Comment-Nov28
 		path.AllowMissingKeys(true)
+
+		klog.V(1).Info(path)
 
 		desc := fmt.Sprintf("Custom resource definition column (in JSONPath format): %s", col.JSONPath)
 		if len(col.Description) > 0 {
@@ -68,6 +87,8 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		})
 	}
 
+	klog.V(1).Info("Final c before returning")
+	klog.V(1).Info(c)
 	return c, nil
 }
 
@@ -114,6 +135,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			us = &unstructured.Unstructured{Object: m}
 		}
 		for i, column := range c.additionalColumns {
+			// TODO (Sreeram/Priyanka): Comment-Nov28
+			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression 
 			results, err := column.FindResults(us.UnstructuredContent())
 			if err != nil || len(results) == 0 || len(results[0]) == 0 {
 				cells = append(cells, nil)
@@ -130,8 +153,12 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 					cells = append(cells, nil)
 				}
 			} else {
+				// TODO (Sreeram/Priyanka): Comment-Nov28
+				// Figure out cellForJSONValue function and if we need an equivalent cellForCELValue function
+				// Look if this can be used for error handling for CEL evaluation errors.
 				cells = append(cells, cellForJSONValue(customHeaders[i].Type, value))
 			}
+			// END Comment-Nov28
 		}
 		return cells, nil
 	})
