@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+
 	"k8s.io/klog/v2"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	crdcel "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metatable "k8s.io/apimachinery/pkg/api/meta/table"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,32 +54,38 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 
 	for _, col := range crdColumns {
 		klog.V(1).Info(col)
-		path := jsonpath.New(col.Name)
-		klog.V(1).Info(path)
-		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
-		klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.Expression)))
+		// klog.V(1).Info(path)
+		// klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
 		// TODO (Sreeram/Priyanka): Comment-Nov28
-		// We need to add the CEL compilation logic bit here in place of JSONPath parsing when dealing with col.Expression 
+		// We need to add the CEL compilation logic bit here in place of JSONPath parsing when dealing with col.Expression
+
 		if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
+			path := jsonpath.New(col.Name)
 			if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
 				return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
 			}
+			path.AllowMissingKeys(true)
+			c.additionalColumns = append(c.additionalColumns, path)
 		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
-			if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
+			klog.V(1).Info("Inside the cel block in tableconverter.new()")
+			prog, err := crdcel.FinalColumnCompile(col.Expression)
+			// TODO (sreeram/Priyanka): Comment-Jan 6 2025
+			// TLDR path = CEL Program (prog)
+			// For JSONPath, path := jsonpath.New, similarly for CEL we're collecting the CEL prog, path := cel.CompileColumn() (function we wrote after copy pasting CompileColumns)
+			// Next thing to take care is how path currently implements findResults, printResults, we need to implement those for cel prog as well so that we can append prog to c.additionalColumns
+			if err != nil {
+				// if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
 				return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
 			}
+			c.additionalColumns = append(c.additionalColumns, prog)
 		}
 		// END Comment-Nov28
-		path.AllowMissingKeys(true)
-
-		klog.V(1).Info(path)
 
 		desc := fmt.Sprintf("Custom resource definition column (in JSONPath format): %s", col.JSONPath)
 		if len(col.Description) > 0 {
 			desc = col.Description
 		}
 
-		c.additionalColumns = append(c.additionalColumns, path)
 		c.headers = append(c.headers, metav1.TableColumnDefinition{
 			Name:        col.Name,
 			Type:        col.Type,
@@ -136,7 +144,7 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 		}
 		for i, column := range c.additionalColumns {
 			// TODO (Sreeram/Priyanka): Comment-Nov28
-			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression 
+			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression
 			results, err := column.FindResults(us.UnstructuredContent())
 			if err != nil || len(results) == 0 || len(results[0]) == 0 {
 				cells = append(cells, nil)
@@ -146,6 +154,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			// as we only support simple JSON path, we can assume to have only one result (or none, filtered out above)
 			value := results[0][0].Interface()
 			if customHeaders[i].Type == "string" {
+				klog.V(1).Info("Printing value we got from findResults")
+				klog.V(1).Info(value)
 				if err := column.PrintResults(buf, []reflect.Value{reflect.ValueOf(value)}); err == nil {
 					cells = append(cells, buf.String())
 					buf.Reset()
