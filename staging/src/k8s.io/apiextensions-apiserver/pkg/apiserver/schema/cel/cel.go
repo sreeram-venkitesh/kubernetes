@@ -1,11 +1,11 @@
 package cel
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
 
-	"github.com/google/cel-go/cel"
 	// "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
 	// celconfig "k8s.io/apiserver/pkg/apis/cel"
@@ -14,6 +14,12 @@ import (
 	// "k8s.io/apiserver/pkg/cel/library"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/klog/v2"
+
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
+
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 )
 
 // type ColumnCompilationResult struct {
@@ -30,8 +36,15 @@ type celProgram struct {
 
 func (c celProgram) FindResults(data interface{}) ([][]reflect.Value, error) {
 	klog.V(1).Info("Inside FindResults of cel")
+	out, det, err := eval(c.Program, cel.NoVars())
+	if err != nil {
+		klog.V(1).Info("Error happened inside FindResults evaluation")
+		klog.V(1).Info(det)
+		klog.V(1).Info(err)
+	}
+
 	reflectSlice := [][]reflect.Value{
-		{reflect.ValueOf("Hello World")},
+		{reflect.ValueOf(out)},
 	}
 	klog.V(1).Info("Printing reflectSlice")
 	klog.V(1).Info(reflectSlice)
@@ -85,7 +98,7 @@ func FinalColumnCompile(rule string) (celProgram, error) {
 		klog.V(1).Info("env error: %v", err)
 	}
 	// Check that the expression compiles and returns a String.
-	ast, iss := env.Parse(`"Hello, World!"`)
+	ast, iss := env.Parse(`"Hello, CEL!"`)
 	klog.V(1).Info("Parsed cel expression to get ast")
 	// Report syntactic errors, if present.
 	if iss.Err() != nil {
@@ -110,7 +123,36 @@ func FinalColumnCompile(rule string) (celProgram, error) {
 	celProg := celProgram{Program: program}
 	return celProg, err
 	// Evaluate the program without any additional arguments.
-	// eval(program, cel.NoVars())
+}
+
+func eval(prg cel.Program,
+	vars any) (out ref.Val, det *cel.EvalDetails, err error) {
+	varMap, isMap := vars.(map[string]any)
+	fmt.Println("------ input ------")
+	if !isMap {
+		fmt.Printf("(%T)\n", vars)
+	} else {
+		for k, v := range varMap {
+			switch val := v.(type) {
+			case proto.Message:
+				bytes, err := prototext.Marshal(val)
+				if err != nil {
+					klog.V(1).Info("failed to marshal proto to text: %v", val)
+				}
+				fmt.Printf("%s = %s", k, string(bytes))
+			case map[string]any:
+				b, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Printf("%s = %v\n", k, string(b))
+			case uint64:
+				fmt.Printf("%s = %vu\n", k, v)
+			default:
+				fmt.Printf("%s = %v\n", k, v)
+			}
+		}
+	}
+	fmt.Println()
+	out, det, err = prg.Eval(vars)
+	return out, det, err
 }
 
 // CEL Cost Levers:
