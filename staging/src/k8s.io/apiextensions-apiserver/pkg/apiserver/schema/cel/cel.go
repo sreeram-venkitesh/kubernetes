@@ -98,7 +98,7 @@ func FinalColumnCompile(rule string) (celProgram, error) {
 		klog.V(1).Info("env error: %v", err)
 	}
 	// Check that the expression compiles and returns a String.
-	ast, iss := env.Parse(`"Hello, CEL!"`)
+	ast, iss := env.Parse(rule)
 	klog.V(1).Info("Parsed cel expression to get ast")
 	// Report syntactic errors, if present.
 	if iss.Err() != nil {

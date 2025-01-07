@@ -814,10 +814,13 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 			allErrs = append(allErrs, errs...)
 		}
 	} else {
-		errs := validateSimpleJSONPath(col.Expression, fldPath.Child("expression"))
-		if len(errs) > 0 {
-			allErrs = append(allErrs, errs...)
-		}
+		// TODO (Sreeram/Priyanka) Jan 7
+		// We need to implement a validateCelExpression function to validate CEL here
+		
+		// errs := validateSimpleJSONPath(col.Expression, fldPath.Child("expression"))
+		// if len(errs) > 0 {
+		// 	allErrs = append(allErrs, errs...)
+		// }
 	}
 	return allErrs
 }
