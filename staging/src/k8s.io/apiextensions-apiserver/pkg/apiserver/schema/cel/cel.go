@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	// "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
@@ -13,6 +14,12 @@ import (
 	// "k8s.io/apiserver/pkg/cel/environment"
 	// "k8s.io/apiserver/pkg/cel/library"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	celconfig "k8s.io/apiserver/pkg/apis/cel"
+	apiservercel "k8s.io/apiserver/pkg/cel"
+	"k8s.io/apiserver/pkg/cel/environment"
+	"k8s.io/apiserver/pkg/cel/library"
 	"k8s.io/klog/v2"
 
 	"github.com/google/cel-go/cel"
@@ -22,13 +29,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// type ColumnCompilationResult struct {
-// 	Error          error
-// 	MaxCost        uint64
-// 	MaxCardinality uint64
-// 	FieldPath      *field.Path
-// 	Program        cel.Program
-// }
+type ColumnCompilationResult struct {
+	Error          error
+	MaxCost        uint64
+	MaxCardinality uint64
+	FieldPath      *field.Path
+	Program        cel.Program
+}
 
 type celProgram struct {
 	Program cel.Program
@@ -98,27 +105,32 @@ func FinalColumnCompile(rule string) (celProgram, error) {
 		klog.V(1).Info("env error: %v", err)
 	}
 	// Check that the expression compiles and returns a String.
-	ast, iss := env.Parse(rule)
-	klog.V(1).Info("Parsed cel expression to get ast")
-	// Report syntactic errors, if present.
-	if iss.Err() != nil {
-		klog.V(1).Info(iss.Err())
-	}
-	// Type-check the expression for correctness.
-	checked, iss := env.Check(ast)
-	klog.V(1).Info("Checked the cel ast")
-	// Report semantic errors, if present.
+	// ast, iss := env.Parse(fmt.Sprintf("\"%s\"", rule))
+	// ast, iss := env.Parse(`size("test")`)
+	// klog.V(1).Info("Parsed cel expression to get ast")
+	// // Report syntactic errors, if present.
+	// if iss.Err() != nil {
+	// 	klog.V(1).Info(iss.Err())
+	// }
+	// // Type-check the expression for correctness.
+	// checked, iss := env.Check(ast)
+	// klog.V(1).Info("Checked the cel ast")
+	// // Report semantic errors, if present.
+	// if iss.Err() != nil {
+	// 	klog.V(1).Info(iss.Err())
+	// }
+	ast, iss := env.Compile(rule)
 	if iss.Err() != nil {
 		klog.V(1).Info(iss.Err())
 	}
 	// Check the output type is a string.
-	if checked.OutputType() != cel.StringType {
+	if ast.OutputType() != cel.AnyType {
 		klog.V(1).Info(
 			"Got %v, wanted %v result type",
-			checked.OutputType(), cel.StringType)
+			ast.OutputType(), cel.AnyType)
 	}
 	// Plan the program.
-	program, err := env.Program(checked)
+	program, err := env.Program(ast)
 	klog.V(1).Info("Got cel program")
 	celProg := celProgram{Program: program}
 	return celProg, err
@@ -161,20 +173,24 @@ func eval(prg cel.Program,
 
 // TODO Comment-Jan 06
 // We've updated teh CompileColumns to handle just a single CEL expression at a time
-// func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
-// 	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	estimator := newCostEstimator(declType)
-// 	// compResults is the return value which saves a list of compilation results in the same order as x-kubernetes-validations rules.
-// 	// compResults := make([]ColumnCompilationResult, len(exprs))
-// 	maxCardinality := maxCardinality(declType.MinSerializedSize)
-// 	ruleEnvSet := oldSelfEnvSet
-// 	compResult := compileColumn(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
+// TODO Jan 17
+// We uncommented CompileColumn and compileColumn to use in the validation for the cel expression
+// but we haven't implemented it as of now. We have uncommented these functions and resolved all errors 
+// that were shown in THIS file.
+func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
+	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
+	if err != nil {
+		return ColumnCompilationResult{}, err
+	}
+	estimator := newCostEstimator(declType)
+	// compResults is the return value which saves a list of compilation results in the same order as x-kubernetes-validations rules.
+	// compResults := make([]ColumnCompilationResult, len(exprs))
+	maxCardinality := maxCardinality(declType.MinSerializedSize)
+	ruleEnvSet := oldSelfEnvSet
+	compResult := compileColumn(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
 
-// 	return compResult, nil
-// }
+	return compResult, nil
+}
 
 // // End of comment-Jan 06
 
@@ -195,51 +211,53 @@ func eval(prg cel.Program,
 // 	return compResults, nil
 // }
 
-// func compileColumn(s *schema.Structural, rule string, envSet *environment.EnvSet, envLoader EnvLoader, estimator *library.CostEstimator, maxCardinality uint64, perCallLimit uint64) (compilationResult ColumnCompilationResult) {
-// 	if len(strings.TrimSpace(rule)) == 0 {
-// 		// include a compilation result, but leave both program and error nil per documented return semantics of this
-// 		// function
-// 		return
-// 	}
-// 	ruleEnv := envLoader.RuleEnv(envSet, rule)
-// 	ast, issues := ruleEnv.Compile(rule)
-// 	if issues != nil {
-// 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "compilation failed: " + issues.String()}
-// 		return
-// 	}
-// 	if ast.OutputType() != cel.BoolType {
-// 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a bool"}
-// 		return
-// 	}
+func compileColumn(s *schema.Structural, rule string, envSet *environment.EnvSet, envLoader EnvLoader, estimator *library.CostEstimator, maxCardinality uint64, perCallLimit uint64) (compilationResult ColumnCompilationResult) {
+	if len(strings.TrimSpace(rule)) == 0 {
+		// include a compilation result, but leave both program and error nil per documented return semantics of this
+		// function
+		return
+	}
+	ruleEnv := envLoader.RuleEnv(envSet, rule)
+	ast, issues := ruleEnv.Compile(rule)
+	if issues != nil {
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "compilation failed: " + issues.String()}
+		return
+	}
 
-// 	_, err := cel.AstToCheckedExpr(ast)
-// 	if err != nil {
-// 		// should be impossible since env.Compile returned no issues
-// 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "unexpected compilation error: " + err.Error()}
-// 		return
-// 	}
+	if ast.OutputType() != cel.StringType {
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a string"}
+		return
+	}
 
-// 	// TODO: Ideally we could configure the per expression limit at validation time and
-// 	// set it to the remaining overall budget, but we would either need a way to pass in
-// 	// a limit at evaluation time or move program creation to validation time
-// 	prog, err := ruleEnv.Program(ast,
-// 		cel.CostLimit(perCallLimit),
-// 		cel.CostTracking(estimator),
-// 		cel.InterruptCheckFrequency(celconfig.CheckFrequency),
-// 	)
-// 	if err != nil {
-// 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "program instantiation failed: " + err.Error()}
-// 		return
-// 	}
-// 	costEst, err := ruleEnv.EstimateCost(ast, estimator)
-// 	if err != nil {
-// 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "cost estimation failed: " + err.Error()}
-// 		return
-// 	}
-// 	compilationResult.MaxCost = costEst.Max
-// 	compilationResult.MaxCardinality = maxCardinality
-// 	compilationResult.Program = prog
-// }
+	_, err := cel.AstToCheckedExpr(ast)
+	if err != nil {
+		// should be impossible since env.Compile returned no issues
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "unexpected compilation error: " + err.Error()}
+		return
+	}
+
+	// TODO: Ideally we could configure the per expression limit at validation time and
+	// set it to the remaining overall budget, but we would either need a way to pass in
+	// a limit at evaluation time or move program creation to validation time
+	prog, err := ruleEnv.Program(ast,
+		cel.CostLimit(perCallLimit),
+		cel.CostTracking(estimator),
+		cel.InterruptCheckFrequency(celconfig.CheckFrequency),
+	)
+	if err != nil {
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "program instantiation failed: " + err.Error()}
+		return
+	}
+	costEst, err := ruleEnv.EstimateCost(ast, estimator)
+	if err != nil {
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "cost estimation failed: " + err.Error()}
+		return
+	}
+	compilationResult.MaxCost = costEst.Max
+	compilationResult.MaxCardinality = maxCardinality
+	compilationResult.Program = prog
+	return compilationResult
+}
 
 // func PrintColumns(compResults []ColumnCompilationResult, sts *schema.Structural, obj interface{}, remainingBudget int64) (field.ErrorList, []string) {
 // 	var exprs []string
