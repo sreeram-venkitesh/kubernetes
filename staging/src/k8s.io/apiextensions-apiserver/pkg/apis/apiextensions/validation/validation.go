@@ -46,6 +46,7 @@ import (
 	apiservercel "k8s.io/apiserver/pkg/cel"
 	"k8s.io/apiserver/pkg/cel/environment"
 	"k8s.io/apiserver/pkg/util/webhook"
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -145,6 +146,11 @@ type validationOptions struct {
 	// allowInvalidCABundle allows an invalid conversion webhook CABundle on update only if the existing CABundle is invalid.
 	// An invalid CABundle is also permitted on create and before a CRD is in an Established=True condition.
 	allowInvalidCABundle bool
+}
+
+type preexistingExpressionsAdditionalPrinterColumn struct {
+	rules              sets.Set[string]
+	messageExpressions sets.Set[string]
 }
 
 type preexistingExpressions struct {
@@ -299,7 +305,7 @@ func validateCustomResourceDefinitionVersion(ctx context.Context, version *apiex
 	allErrs = append(allErrs, validateCustomResourceDefinitionValidation(ctx, version.Schema, statusEnabled, opts, fldPath.Child("schema"))...)
 	allErrs = append(allErrs, ValidateCustomResourceDefinitionSubresources(version.Subresources, fldPath.Child("subresources"))...)
 	for i := range version.AdditionalPrinterColumns {
-		allErrs = append(allErrs, ValidateCustomResourceColumnDefinition(&version.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i))...)
+		allErrs = append(allErrs, ValidateCustomResourceColumnDefinition(&version.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i), &opts)...)
 	}
 
 	if len(version.SelectableFields) > 0 {
@@ -470,7 +476,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 	allErrs = append(allErrs, ValidateCustomResourceDefinitionSubresources(spec.Subresources, fldPath.Child("subresources"))...)
 
 	for i := range spec.AdditionalPrinterColumns {
-		if errs := ValidateCustomResourceColumnDefinition(&spec.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i)); len(errs) > 0 {
+		if errs := ValidateCustomResourceColumnDefinition(&spec.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i), &opts); len(errs) > 0 {
 			allErrs = append(allErrs, errs...)
 		}
 	}
@@ -787,7 +793,7 @@ func ValidateCustomResourceDefinitionNames(names *apiextensions.CustomResourceDe
 }
 
 // ValidateCustomResourceColumnDefinition statically validates a printer column.
-func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceColumnDefinition, fldPath *field.Path) field.ErrorList {
+func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceColumnDefinition, fldPath *field.Path, opts *validationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
 	if len(col.Name) == 0 {
@@ -816,11 +822,39 @@ func ValidateCustomResourceColumnDefinition(col *apiextensions.CustomResourceCol
 	} else {
 		// TODO (Sreeram/Priyanka) Jan 7
 		// We need to implement a validateCelExpression function to validate CEL here
-		
-		// errs := validateSimpleJSONPath(col.Expression, fldPath.Child("expression"))
-		// if len(errs) > 0 {
-		// 	allErrs = append(allErrs, errs...)
-		// }
+		var celContext *CELSchemaContext
+		var structuralSchemaInitErrs field.ErrorList
+		if opts.requireStructuralSchema {
+			if ss, err := structuralschema.NewStructural(schema); err != nil {
+				// These validation errors overlap with  OpenAPISchema validation errors so we keep track of them
+				// separately and only show them if OpenAPISchema validation does not report any errors.
+				structuralSchemaInitErrs = append(structuralSchemaInitErrs, field.Invalid(fldPath.Child("openAPIV3Schema"), "", err.Error()))
+			} else if validationErrors := structuralschema.ValidateStructural(fldPath.Child("openAPIV3Schema"), ss); len(validationErrors) > 0 {
+				allErrs = append(allErrs, validationErrors...)
+			} else if validationErrors, err := structuraldefaulting.ValidateDefaults(ctx, fldPath.Child("openAPIV3Schema"), ss, true, opts.requirePrunedDefaults); err != nil {
+				// this should never happen
+				allErrs = append(allErrs, field.Invalid(fldPath.Child("openAPIV3Schema"), "", err.Error()))
+			} else if len(validationErrors) > 0 {
+				allErrs = append(allErrs, validationErrors...)
+			} else {
+				// Only initialize CEL rule validation context if the structural schemas are valid.
+				// A nil CELSchemaContext indicates that no CEL validation should be attempted.
+				celContext = RootCELContext(schema)
+			}
+		}
+		typeInfo, err := celContext.TypeInfo()
+		if err != nil {
+			klog.V(1).Info("Error at CEL expression vaidation: %v", err)
+		}
+
+		klog.V(1).Info("Printing opts")
+		klog.V(1).Info(opts)
+		compResult, err := cel.CompileColumn(col.Expression, typeInfo.Schema, typeInfo.DeclType, celconfig.PerCallLimit, opts.celEnvironmentSet /*, opts.preexistingExpressions*/)
+
+		if err != nil {
+			klog.V(1).Info("Error at CEL expression vaidation: %v", err)
+		}
+		klog.V(1).Info("CEL compile result: %v", compResult)
 	}
 	return allErrs
 }

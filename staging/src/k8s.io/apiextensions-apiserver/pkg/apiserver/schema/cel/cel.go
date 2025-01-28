@@ -35,6 +35,7 @@ type ColumnCompilationResult struct {
 	MaxCardinality uint64
 	FieldPath      *field.Path
 	Program        cel.Program
+	// Program        *celProgram.Program
 }
 
 type celProgram struct {
@@ -177,7 +178,7 @@ func eval(prg cel.Program,
 // We uncommented CompileColumn and compileColumn to use in the validation for the cel expression
 // but we haven't implemented it as of now. We have uncommented these functions and resolved all errors 
 // that were shown in THIS file.
-func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
+func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet /*, envLoader EnvLoader */) (ColumnCompilationResult, error) {
 	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
 	if err != nil {
 		return ColumnCompilationResult{}, err
@@ -187,7 +188,7 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 	// compResults := make([]ColumnCompilationResult, len(exprs))
 	maxCardinality := maxCardinality(declType.MinSerializedSize)
 	ruleEnvSet := oldSelfEnvSet
-	compResult := compileColumn(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
+	compResult := compileColumnExpression(s, expr, ruleEnvSet, estimator, maxCardinality, perCallLimit)
 
 	return compResult, nil
 }
@@ -211,7 +212,7 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 // 	return compResults, nil
 // }
 
-func compileColumn(s *schema.Structural, rule string, envSet *environment.EnvSet, envLoader EnvLoader, estimator *library.CostEstimator, maxCardinality uint64, perCallLimit uint64) (compilationResult ColumnCompilationResult) {
+func compileColumnExpression(s *schema.Structural, rule string, envSet *environment.EnvSet, envLoader EnvLoader, estimator *library.CostEstimator, maxCardinality uint64, perCallLimit uint64) (compilationResult ColumnCompilationResult) {
 	if len(strings.TrimSpace(rule)) == 0 {
 		// include a compilation result, but leave both program and error nil per documented return semantics of this
 		// function
@@ -224,7 +225,8 @@ func compileColumn(s *schema.Structural, rule string, envSet *environment.EnvSet
 		return
 	}
 
-	if ast.OutputType() != cel.StringType {
+	// if ast.OutputType() != cel.StringType {
+	if ast.OutputType() != cel.AnyType{
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a string"}
 		return
 	}
