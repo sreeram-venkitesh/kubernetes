@@ -378,6 +378,8 @@ type Status struct {
 	User *ContainerUser
 	// Mounts are the volume mounts of the container
 	Mounts []Mount
+
+	StopSignal string
 }
 
 // ContainerUser represents user identity information

@@ -370,6 +370,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(ctx context.Context,
 		Stdin:       container.Stdin,
 		StdinOnce:   container.StdinOnce,
 		Tty:         container.TTY,
+		StopSignal:  container.StopSignal,
 	}
 
 	// set platform specific configurations.
@@ -650,6 +651,7 @@ func toKubeContainerStatus(status *runtimeapi.ContainerStatus, runtimeName strin
 		CreatedAt:           time.Unix(0, status.CreatedAt),
 		Resources:           cStatusResources,
 		User:                cStatusUser,
+		StopSignal:          status.GetStopSignal(),
 	}
 
 	if status.State != runtimeapi.ContainerState_CONTAINER_CREATED {

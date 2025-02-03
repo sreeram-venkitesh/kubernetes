@@ -1151,6 +1151,8 @@ message ContainerConfig {
 
     // CDI devices for the container.
     repeated CDIDevice CDI_devices = 17;
+
+    string stop_signal = 18;
 }
 
 message CreateContainerRequest {
@@ -1326,6 +1328,8 @@ message ContainerStatus {
     string image_id = 17;
     // User identities initially attached to the container
     ContainerUser user = 18;
+
+    string stop_signal = 19;
 }
 
 message ContainerStatusResponse {
