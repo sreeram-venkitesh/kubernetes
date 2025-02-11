@@ -178,7 +178,7 @@ func eval(prg cel.Program,
 // We uncommented CompileColumn and compileColumn to use in the validation for the cel expression
 // but we haven't implemented it as of now. We have uncommented these functions and resolved all errors 
 // that were shown in THIS file.
-func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet /*, envLoader EnvLoader */) (ColumnCompilationResult, error) {
+func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
 	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
 	if err != nil {
 		return ColumnCompilationResult{}, err
@@ -188,7 +188,7 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 	// compResults := make([]ColumnCompilationResult, len(exprs))
 	maxCardinality := maxCardinality(declType.MinSerializedSize)
 	ruleEnvSet := oldSelfEnvSet
-	compResult := compileColumnExpression(s, expr, ruleEnvSet, estimator, maxCardinality, perCallLimit)
+	compResult := compileColumnExpression(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
 
 	return compResult, nil
 }
