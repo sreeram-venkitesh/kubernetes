@@ -10,7 +10,7 @@ spec:
     singular: shirt
     kind: Shirt
     shortNames:
-      - shrt
+      - shrt   
   versions:
   - name: v1
     served: true
@@ -27,53 +27,6 @@ spec:
               size:
                 type: string
     additionalPrinterColumns:
-    - jsonPath: .spec.color
-      name: Color
-      type: string
-      description: "testing"
-    # - expression: "[\"hello\",\"world\"].map(x, x[0])"
-    - expression: "{'a': 1, 'b': 2, 'c': 3}.filter(key, key != 'b')"
-      name: Size
-      type: string
-    - expression: "{'x': 'foo', 'y': 'bar'}.exists(key, key.startsWith('z'))"
-      name: Exists
-      type: string
-    - expression: "[{'a': 10, 'b': 5, 'c': 20}].map(m, m.filter(key, m[key] > 10))"
-      name: Map JSON
-      type: string
-    - expression: "('hellsfdsfdsfddddo'.size() > 10) ? double(1/2) : double(42)"
-      name: "ternary"
-      type: string
-    - expression: "(2 < 5) ? 'yes' : 'no'"
-      name: "conditional"
-      type: string
-    - expression: "duration('1m') - duration('1s')"
-      name: "duration"
-      type: string
-    - expression: "timestamp('2023-01-10T12:00:00Z')"
-      name: "timestamp"
-      type: string
-    - expression: "b'hello'.size()"
-      name: "binary size"
-      type: string
-    - expression: "\"hello world\".contains(\"world\")"
-      name: string contains word?
-      type: string
-    - expression: "matches(\"foobar\", \"foo.*\")"
-      name: regex
-      type: string
-    - expression: "timestamp(\"2023-12-25T00:00:00Z\").getDayOfMonth()"
-      name: day
-      type: string
-    - expression: "timestamp(\"2023-12-25T00:00:00Z\").getDayOfMonth(\"America/Los_Angeles\")"
-      name: timezone 
-      type: string
-    - expression: "timestamp(\"2023-12-25T12:00:00.500Z\").getMilliseconds()"
-      name: "milliseconds"
-      type: "string"
-    - expression: "duration(\"1.234s\").getMilliseconds()"
-      name: "duration's milliseconds"
-      type: "string"
-    - expression: "['apple', 'banana'].map(fruit, fruit.upperAscii())"
+    - expression: "spec.color"
       name: Fruit
       type: string
