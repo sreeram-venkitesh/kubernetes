@@ -53006,13 +53006,18 @@ func schema_pkg_apis_apiextensions_v1_CustomResourceColumnDefinition(ref common.
 					"jsonPath": {
 						SchemaProps: spec.SchemaProps{
 							Description: "jsonPath is a simple JSON path (i.e. with array notation) which is evaluated against each custom resource to produce the value for this column.",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
+					"expression": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
-				Required: []string{"name", "type", "jsonPath"},
+				Required: []string{"name", "type"},
 			},
 		},
 	}
@@ -54484,13 +54489,18 @@ func schema_pkg_apis_apiextensions_v1beta1_CustomResourceColumnDefinition(ref co
 					"JSONPath": {
 						SchemaProps: spec.SchemaProps{
 							Description: "JSONPath is a simple JSON path (i.e. with array notation) which is evaluated against each custom resource to produce the value for this column.",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
+					"expression": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
-				Required: []string{"name", "type", "JSONPath"},
+				Required: []string{"name", "type"},
 			},
 		},
 	}
