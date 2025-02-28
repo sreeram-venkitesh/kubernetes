@@ -24,7 +24,10 @@ import (
 	"io"
 	"reflect"
 
+	"k8s.io/klog/v2"
+
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	crdcel "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metatable "k8s.io/apimachinery/pkg/api/meta/table"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,19 +49,43 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		headers: headers,
 	}
 
+	klog.V(1).Info("Inside tableconvertor New function")
+	klog.V(1).Info(c)
+
 	for _, col := range crdColumns {
-		path := jsonpath.New(col.Name)
-		if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
-			return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+		klog.V(1).Info(col)
+		// klog.V(1).Info(path)
+		// klog.V(1).Info(path.Parse(fmt.Sprintf("{%s}", col.JSONPath)))
+		// TODO (Sreeram/Priyanka): Comment-Nov28
+		// We need to add the CEL compilation logic bit here in place of JSONPath parsing when dealing with col.Expression
+
+		if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
+			path := jsonpath.New(col.Name)
+			if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
+			}
+			path.AllowMissingKeys(true)
+			c.additionalColumns = append(c.additionalColumns, path)
+		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
+			klog.V(1).Info("Inside the cel block in tableconverter.new()")
+			prog, err := crdcel.FinalColumnCompile(col.Expression)
+			// TODO (sreeram/Priyanka): Comment-Jan 6 2025
+			// TLDR path = CEL Program (prog)
+			// For JSONPath, path := jsonpath.New, similarly for CEL we're collecting the CEL prog, path := cel.CompileColumn() (function we wrote after copy pasting CompileColumns)
+			// Next thing to take care is how path currently implements findResults, printResults, we need to implement those for cel prog as well so that we can append prog to c.additionalColumns
+			if err != nil {
+				// if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
+				return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
+			}
+			c.additionalColumns = append(c.additionalColumns, prog)
 		}
-		path.AllowMissingKeys(true)
+		// END Comment-Nov28
 
 		desc := fmt.Sprintf("Custom resource definition column (in JSONPath format): %s", col.JSONPath)
 		if len(col.Description) > 0 {
 			desc = col.Description
 		}
 
-		c.additionalColumns = append(c.additionalColumns, path)
 		c.headers = append(c.headers, metav1.TableColumnDefinition{
 			Name:        col.Name,
 			Type:        col.Type,
@@ -68,6 +95,8 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 		})
 	}
 
+	klog.V(1).Info("Final c before returning")
+	klog.V(1).Info(c)
 	return c, nil
 }
 
@@ -114,6 +143,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			us = &unstructured.Unstructured{Object: m}
 		}
 		for i, column := range c.additionalColumns {
+			// TODO (Sreeram/Priyanka): Comment-Nov28
+			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression
 			results, err := column.FindResults(us.UnstructuredContent())
 			if err != nil || len(results) == 0 || len(results[0]) == 0 {
 				cells = append(cells, nil)
@@ -123,6 +154,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			// as we only support simple JSON path, we can assume to have only one result (or none, filtered out above)
 			value := results[0][0].Interface()
 			if customHeaders[i].Type == "string" {
+				klog.V(1).Info("Printing value we got from findResults")
+				klog.V(1).Info(value)
 				if err := column.PrintResults(buf, []reflect.Value{reflect.ValueOf(value)}); err == nil {
 					cells = append(cells, buf.String())
 					buf.Reset()
@@ -130,8 +163,12 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 					cells = append(cells, nil)
 				}
 			} else {
+				// TODO (Sreeram/Priyanka): Comment-Nov28
+				// Figure out cellForJSONValue function and if we need an equivalent cellForCELValue function
+				// Look if this can be used for error handling for CEL evaluation errors.
 				cells = append(cells, cellForJSONValue(customHeaders[i].Type, value))
 			}
+			// END Comment-Nov28
 		}
 		return cells, nil
 	})
