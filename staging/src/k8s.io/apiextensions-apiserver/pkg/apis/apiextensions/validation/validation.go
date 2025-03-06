@@ -303,6 +303,18 @@ func ValidateUpdateCustomResourceDefinitionStatus(obj, oldObj *apiextensions.Cus
 	return allErrs
 }
 
+// func getSchemaForVersion(spec *apiextensions.CustomResourceDefinitionSpec, versionName string) *apiextensions.CustomResourceValidation {
+// 	// First try to get from version-specific schema
+// 	for _, v := range spec.Versions {
+// 		if v.Name == versionName && v.Schema != nil {
+// 			return v.Schema
+// 		}
+// 	}
+
+// 	// Fall back to top-level schema
+// 	return spec.Validation
+// }
+
 // validateCustomResourceDefinitionVersion statically validates.
 // context is passed for supporting context cancellation during cel validation when validating defaults
 func validateCustomResourceDefinitionVersion(ctx context.Context, version *apiextensions.CustomResourceDefinitionVersion, fldPath *field.Path, statusEnabled bool, opts validationOptions) field.ErrorList {
@@ -316,6 +328,11 @@ func validateCustomResourceDefinitionVersion(ctx context.Context, version *apiex
 	opts = suppressExpressionCostForUnchangedSchema(opts, version.Name)
 	allErrs = append(allErrs, validateCustomResourceDefinitionValidation(ctx, version.Schema, statusEnabled, opts, fldPath.Child("schema"))...)
 	allErrs = append(allErrs, ValidateCustomResourceDefinitionSubresources(version.Subresources, fldPath.Child("subresources"))...)
+
+	// schema := getSchemaForVersion(spec, version.Name)
+	// klog.V(1).Infof("schema for version from claude's code %s: %v", version.Name, schema)
+	// klog.V(1).Infof("schema.openapiv3schema from claude %v", schema.OpenAPIV3Schema)
+
 	for i := range version.AdditionalPrinterColumns {
 		allErrs = append(allErrs, ValidateCustomResourceColumnDefinition(ctx, version.Schema, &version.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i), &opts)...)
 	}
@@ -492,19 +509,15 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 
 	for i := range spec.AdditionalPrinterColumns {
 		klog.V(1).Info("Printing inside the spec level additionalPrinterColumn loop inside validateCustomResourceDefinitionSpec")
-		klog.V(1).Infof("spec.Versions: %v", spec.Versions)
+		klog.V(1).Infof("spec.Versions: %v", spec.Validation.OpenAPIV3Schema)
 
 		// Since we added customResourceValidation *apiextensions.CustomResourceValidation as a parameter for ValidateCustomResourceColumnDefinition
 		// we are looping through all the versions in the CRD and passing version.Schema for this parameter
-		// The challenge we're facing now is that version.Schema is nil. 
+		// The challenge we're facing now is that version.Schema is nil.
 		// Line number 494 above prints `spec.Versions: [{v1 true true false <nil> <nil> <nil> [] []}]`` where you can see that version.Schema is nil
 		// Because of this the CEL compilation logic in ValidateCustomResourceColumnDefinition is not triggered and we're unable to test it
-		for _, version := range spec.Versions {
-			klog.V(1).Info(version)
-			klog.V(1).Info(version.Schema)
-			if errs := ValidateCustomResourceColumnDefinition(ctx, version.Schema, &spec.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i), &opts); len(errs) > 0 {
-				allErrs = append(allErrs, errs...)
-			}
+		if errs := ValidateCustomResourceColumnDefinition(ctx, spec.Validation, &spec.AdditionalPrinterColumns[i], fldPath.Child("additionalPrinterColumns").Index(i), &opts); len(errs) > 0 {
+			allErrs = append(allErrs, errs...)
 		}
 
 		// Since we know spec.Validation is not empty we tried passing it instead of version.Schema. This didn't work.
@@ -512,7 +525,7 @@ func validateCustomResourceDefinitionSpec(ctx context.Context, spec *apiextensio
 		// 	allErrs = append(allErrs, errs...)
 		// }
 	}
-	
+
 	if len(spec.SelectableFields) > 0 {
 		if spec.Validation == nil {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("selectableFields"), "", "may only be set when validations.schema is included"))
@@ -911,10 +924,28 @@ func ValidateCustomResourceColumnDefinition(ctx context.Context, customResourceV
 				} else {
 					// Only initialize CEL rule validation context if the structural schemas are valid.
 					// A nil CELSchemaContext indicates that no CEL validation should be attempted.
+					klog.V(1).Infof("schema before giving it to RootCELContext: %v", schema)
 					celContext = RootCELContext(schema)
 				}
 			}
 			klog.V(1).Info("Going to call cel.CompileColumn!")
+			klog.V(1).Infof("schema: %v", celContext)
+			klog.V(1).Infof("jsonschema: %v", celContext.jsonSchema)
+			klog.V(1).Infof("converter: %v", celContext.converter)
+			klog.V(1).Infof("maxcardinality: %v", celContext.MaxCardinality)
+			klog.V(1).Infof("TotalCost: %v", celContext.TotalCost)
+
+			typeInf, err := celContext.TypeInfo()
+			klog.V(1).Infof("HII reached here!")
+			klog.V(1).Infof("expr: %v", col.Expression)
+			klog.V(1).Infof("typeinfo: %v", typeInf)
+			klog.V(1).Infof("typeinfo error: %v", err)
+			klog.V(1).Infof("schema: %v", typeInf.Schema)
+			klog.V(1).Infof("decltype: %v", typeInf.DeclType)
+			klog.V(1).Infof("declType: %v", celContext.typeInfo.DeclType)
+			klog.V(1).Infof("perCallLimit: %v", celconfig.PerCallLimit)
+			klog.V(1).Infof("baseEnvSet: %v", opts.celEnvironmentSet)
+			klog.V(1).Infof("envLoader: %v", opts.preexistingExpressions)
 			compResult, err := cel.CompileColumn(col.Expression, celContext.typeInfo.Schema, celContext.typeInfo.DeclType, celconfig.PerCallLimit, opts.celEnvironmentSet, opts.preexistingExpressions)
 
 			if err != nil {
@@ -1072,6 +1103,7 @@ func validateCustomResourceDefinitionValidation(ctx context.Context, customResou
 			} else {
 				// Only initialize CEL rule validation context if the structural schemas are valid.
 				// A nil CELSchemaContext indicates that no CEL validation should be attempted.
+				klog.V(1).Infof("schema before giving it to RootCELContext from the XValidation one: %v", schema)
 				celContext = RootCELContext(schema)
 			}
 		}
@@ -1370,7 +1402,11 @@ func ValidateCustomResourceDefinitionOpenAPISchema(schema *apiextensions.JSONSch
 		// validation error messages that are not actionable (will go away once the schema errors are resolved) and that
 		// are difficult for CEL expression authors to understand.
 		if len(allErrs.SchemaErrors) == 0 && celContext != nil {
+			klog.V(1).Infof("Printing CEL context from inside Xvalidations %v", celContext)
+
 			typeInfo, err := celContext.TypeInfo()
+			klog.V(1).Infof("Printing typeinfo from inside Xvalidations %v", typeInfo)
+			klog.V(1).Infof("Printing typeinfo error from inside Xvalidations %v", err)
 			if err != nil {
 				allErrs.CELErrors = append(allErrs.CELErrors, field.InternalError(fldPath.Child("x-kubernetes-validations"), fmt.Errorf("internal error: failed to construct type information for x-kubernetes-validations rules: %s", err)))
 			} else if typeInfo == nil {
