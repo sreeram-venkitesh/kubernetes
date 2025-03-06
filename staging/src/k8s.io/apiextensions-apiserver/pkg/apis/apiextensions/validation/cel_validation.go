@@ -144,6 +144,20 @@ func RootCELContext(schema *apiextensions.JSONSchemaProps) *CELSchemaContext {
 	return r
 }
 
+// PrinterColumnCELContext constructs a CELSchemaContext for additionalPrinterColumns validation.
+// Unlike RootCELContext, this always enables validation scope since we need CEL env for printer columns.
+func PrinterColumnCELContext(schema *apiextensions.JSONSchemaProps) *CELSchemaContext {
+	rootCardinality := uint64(1)
+	r := &CELSchemaContext{
+		jsonSchema:                schema,
+		withinValidationRuleScope: true, // Always enable for printer columns
+		MaxCardinality:            &rootCardinality,
+		TotalCost:                 &TotalCost{},
+		converter:                 defaultConverter,
+	}
+	return r
+}
+
 // ChildPropertyContext returns nil, nil if this CELSchemaContext is nil, otherwise constructs and returns a
 // CELSchemaContext for propertyName.
 func (c *CELSchemaContext) ChildPropertyContext(propSchema *apiextensions.JSONSchemaProps, propertyName string) *CELSchemaContext {

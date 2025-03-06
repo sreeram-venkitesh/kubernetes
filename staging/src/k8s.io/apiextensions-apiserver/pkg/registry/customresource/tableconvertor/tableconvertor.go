@@ -27,21 +27,73 @@ import (
 	"k8s.io/klog/v2"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	crdcel "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
+	"k8s.io/apiserver/pkg/cel/environment"
+
+	// "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel"
+	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/interpreter"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metatable "k8s.io/apimachinery/pkg/api/meta/table"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	celopenapi "k8s.io/apiserver/pkg/cel/common"
+
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema/cel/model"
+	celconfig "k8s.io/apiserver/pkg/apis/cel"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/client-go/util/jsonpath"
 )
 
 var swaggerMetadataDescriptions = metav1.ObjectMeta{}.SwaggerDoc()
 
+func UnstructuredToVal(unstructured interface{}, schema *structuralschema.Structural) ref.Val {
+	return celopenapi.UnstructuredToVal(unstructured, &model.Structural{Structural: schema})
+}
+
+type validationActivation struct {
+	self, oldSelf ref.Val
+	hasOldSelf    bool
+}
+
+const (
+	// ScopedVarName is the variable name assigned to the locally scoped data element of a CEL validation
+	// expression.
+	ScopedVarName = "self"
+
+	// OldScopedVarName is the variable name assigned to the existing value of the locally scoped data element of a
+	// CEL validation expression.
+	OldScopedVarName = "oldSelf"
+)
+
+func (a *validationActivation) ResolveName(name string) (interface{}, bool) {
+	switch name {
+	case ScopedVarName:
+		return a.self, true
+	case OldScopedVarName:
+		return a.oldSelf, a.hasOldSelf
+	default:
+		return nil, false
+	}
+}
+
+func (a *validationActivation) Parent() interpreter.Activation {
+	return nil
+}
+
+func validationActivationWithoutOldSelf(sts *schema.Structural, obj, _ interface{}) (interpreter.Activation, interpreter.Activation) {
+	res := &validationActivation{
+		self: UnstructuredToVal(obj, sts),
+	}
+	return res, res
+}
+
 // New creates a new table convertor for the provided CRD column definition. If the printer definition cannot be parsed,
 // error will be returned along with a default table convertor.
-func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.TableConvertor, error) {
+func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition, s *schema.Structural) (rest.TableConvertor, error) {
 	headers := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: swaggerMetadataDescriptions["name"]},
 	}
@@ -68,16 +120,22 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition) (rest.Tabl
 			c.additionalColumns = append(c.additionalColumns, path)
 		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
 			klog.V(1).Info("Inside the cel block in tableconverter.new()")
-			prog, err := crdcel.FinalColumnCompile(col.Expression)
+			// prog, err := crdcel.FinalColumnCompile(col.Expression)
+
+			compResult, err := cel.CompileColumn(col.Expression, s, model.SchemaDeclType(s, true), celconfig.PerCallLimit, environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), true), cel.StoredExpressionsEnvLoader())
+			klog.V(1).Infof("HEHEHE Error in CEL program compilation in tableconvertor: %v", err)
+			klog.V(1).Infof("HEHEHE CEL program compresult in tableconvertor: %v", compResult)
+
+			// klog.V(1).Infof("FINAL ERROR PRINTING: %v", err)
 			// TODO (sreeram/Priyanka): Comment-Jan 6 2025
 			// TLDR path = CEL Program (prog)
 			// For JSONPath, path := jsonpath.New, similarly for CEL we're collecting the CEL prog, path := cel.CompileColumn() (function we wrote after copy pasting CompileColumns)
 			// Next thing to take care is how path currently implements findResults, printResults, we need to implement those for cel prog as well so that we can append prog to c.additionalColumns
-			if err != nil {
-				// if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
-				return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
-			}
-			c.additionalColumns = append(c.additionalColumns, prog)
+			// if err != nil {
+			// if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
+			// return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
+			// }
+			c.additionalColumns = append(c.additionalColumns, compResult.Program)
 		}
 		// END Comment-Nov28
 
