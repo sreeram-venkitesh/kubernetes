@@ -176,9 +176,18 @@ func eval(prg cel.Program,
 // We've updated teh CompileColumns to handle just a single CEL expression at a time
 // TODO Jan 17
 // We uncommented CompileColumn and compileColumn to use in the validation for the cel expression
-// but we haven't implemented it as of now. We have uncommented these functions and resolved all errors 
+// but we haven't implemented it as of now. We have uncommented these functions and resolved all errors
 // that were shown in THIS file.
 func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
+
+	klog.V(1).Infof("HII reached here!")
+	klog.V(1).Infof("expr: %v", expr)
+	klog.V(1).Infof("schema: %v", s)
+	klog.V(1).Infof("declType: %v", declType)
+	klog.V(1).Infof("perCallLimit: %v", perCallLimit)
+	klog.V(1).Infof("baseEnvSet: %v", baseEnvSet)
+	klog.V(1).Infof("envLoader: %v", envLoader)
+
 	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
 	if err != nil {
 		return ColumnCompilationResult{}, err
@@ -226,7 +235,7 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 	}
 
 	// if ast.OutputType() != cel.StringType {
-	if ast.OutputType() != cel.AnyType{
+	if ast.OutputType() != cel.AnyType {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a string"}
 		return
 	}
