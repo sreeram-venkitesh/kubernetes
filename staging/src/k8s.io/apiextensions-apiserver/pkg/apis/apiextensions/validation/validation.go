@@ -925,7 +925,7 @@ func ValidateCustomResourceColumnDefinition(ctx context.Context, customResourceV
 					// Only initialize CEL rule validation context if the structural schemas are valid.
 					// A nil CELSchemaContext indicates that no CEL validation should be attempted.
 					klog.V(1).Infof("schema before giving it to RootCELContext: %v", schema)
-					celContext = RootCELContext(schema)
+					celContext = PrinterColumnCELContext(schema)
 				}
 			}
 			klog.V(1).Info("Going to call cel.CompileColumn!")
@@ -950,10 +950,10 @@ func ValidateCustomResourceColumnDefinition(ctx context.Context, customResourceV
 
 			if err != nil {
 				klog.V(1).Infof("Error at CEL expression vaidation: %v", err)
+				allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("CEL compilation failed for %s rules: %s", col.Expression, err)))
 			}
 			klog.V(1).Infof("CEL compile result: %v", compResult)
 
-			allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("internal error: failed to construct type information for %s rules: %s", col.Expression, err)))
 			// allErrs = append(allErrs, ValidateCustomResourceDefinitionOpenAPISchema(schema, fldPath.Child("openAPIV3Schema"), openAPIV3Schema, true, &opts, celContext).AllErrors()...)
 
 			if len(allErrs) == 0 && len(structuralSchemaInitErrs) > 0 {

@@ -15,18 +15,20 @@ import (
 	// "k8s.io/apiserver/pkg/cel/library"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	// structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	celconfig "k8s.io/apiserver/pkg/apis/cel"
 	apiservercel "k8s.io/apiserver/pkg/cel"
 	"k8s.io/apiserver/pkg/cel/environment"
 	"k8s.io/apiserver/pkg/cel/library"
+
+	"github.com/google/cel-go/common/types/ref"
 	"k8s.io/klog/v2"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types/ref"
-
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
+	celconfig "k8s.io/apiserver/pkg/apis/cel"
 )
 
 type ColumnCompilationResult struct {
@@ -34,8 +36,8 @@ type ColumnCompilationResult struct {
 	MaxCost        uint64
 	MaxCardinality uint64
 	FieldPath      *field.Path
-	Program        cel.Program
-	// Program        *celProgram.Program
+	// Program        cel.Program
+	Program *celProgram
 }
 
 type celProgram struct {
@@ -44,7 +46,22 @@ type celProgram struct {
 
 func (c celProgram) FindResults(data interface{}) ([][]reflect.Value, error) {
 	klog.V(1).Info("Inside FindResults of cel")
-	out, det, err := eval(c.Program, cel.NoVars())
+	// out, det, err := Eval(c.Program, cel.NoVars())
+
+	// activationFactory, _ := validationActivationWithoutOldSelf(data.(*schema.Structural), nil, nil)
+	klog.V(1).Info(data)
+	vars := map[string]interface{}{
+		"self": data,
+	}
+
+	evalResult, det, err := c.Program.Eval(vars)
+	// if err != nil {
+	// return c, fmt.Errorf("invalid CEL expression %q: %v", col.Expression, err)
+	// }
+
+	klog.V(1).Infof("HEHEHE EvalResult in tableconvertor: %v", evalResult)
+	klog.V(1).Infof("HEHEHE eval err in tableconvertor: %v", err)
+
 	if err != nil {
 		klog.V(1).Info("Error happened inside FindResults evaluation")
 		klog.V(1).Info(det)
@@ -52,7 +69,7 @@ func (c celProgram) FindResults(data interface{}) ([][]reflect.Value, error) {
 	}
 
 	reflectSlice := [][]reflect.Value{
-		{reflect.ValueOf(out)},
+		{reflect.ValueOf(evalResult)},
 	}
 	klog.V(1).Info("Printing reflectSlice")
 	klog.V(1).Info(reflectSlice)
@@ -94,51 +111,75 @@ func (c celProgram) PrintResults(w io.Writer, results []reflect.Value) error {
 	return nil
 }
 
-func FinalColumnCompile(rule string) (celProgram, error) {
-	klog.V(1).Info("Inside FinalColumnCompile function")
-	// Jan 7
-	// Here we will need to update this env with the env that Kubernetes uses
-	// Look into prepareEnvSet() function in the cel package in this path
-	// We can possible reuse Alex's code to prepare env
-	env, err := cel.NewEnv()
-	klog.V(1).Info("Created cel.NewEnv()")
-	if err != nil {
-		klog.V(1).Info("env error: %v", err)
-	}
-	// Check that the expression compiles and returns a String.
-	// ast, iss := env.Parse(fmt.Sprintf("\"%s\"", rule))
-	// ast, iss := env.Parse(`size("test")`)
-	// klog.V(1).Info("Parsed cel expression to get ast")
-	// // Report syntactic errors, if present.
-	// if iss.Err() != nil {
-	// 	klog.V(1).Info(iss.Err())
-	// }
-	// // Type-check the expression for correctness.
-	// checked, iss := env.Check(ast)
-	// klog.V(1).Info("Checked the cel ast")
-	// // Report semantic errors, if present.
-	// if iss.Err() != nil {
-	// 	klog.V(1).Info(iss.Err())
-	// }
-	ast, iss := env.Compile(rule)
-	if iss.Err() != nil {
-		klog.V(1).Info(iss.Err())
-	}
-	// Check the output type is a string.
-	if ast.OutputType() != cel.AnyType {
-		klog.V(1).Info(
-			"Got %v, wanted %v result type",
-			ast.OutputType(), cel.AnyType)
-	}
-	// Plan the program.
-	program, err := env.Program(ast)
-	klog.V(1).Info("Got cel program")
-	celProg := celProgram{Program: program}
-	return celProg, err
-	// Evaluate the program without any additional arguments.
-}
+// func FinalColumnCompile(rule string) (celProgram, error) {
+// 	// klog.V(1).Info("Inside FinalColumnCompile function")
+// 	// // Jan 7
+// 	// // Here we will need to update this env with the env that Kubernetes uses
+// 	// // Look into prepareEnvSet() function in the cel package in this path
+// 	// // We can possible reuse Alex's code to prepare env
+// 	// env, err := cel.NewEnv()
+// 	// klog.V(1).Info("Created cel.NewEnv()")
+// 	// if err != nil {
+// 	// 	klog.V(1).Info("env error: %v", err)
+// 	// }
+// 	// // Check that the expression compiles and returns a String.
+// 	// // ast, iss := env.Parse(fmt.Sprintf("\"%s\"", rule))
+// 	// // ast, iss := env.Parse(`size("test")`)
+// 	// // klog.V(1).Info("Parsed cel expression to get ast")
+// 	// // // Report syntactic errors, if present.
+// 	// // if iss.Err() != nil {
+// 	// // 	klog.V(1).Info(iss.Err())
+// 	// // }
+// 	// // // Type-check the expression for correctness.
+// 	// // checked, iss := env.Check(ast)
+// 	// // klog.V(1).Info("Checked the cel ast")
+// 	// // // Report semantic errors, if present.
+// 	// // if iss.Err() != nil {
+// 	// // 	klog.V(1).Info(iss.Err())
+// 	// // }
+// 	// ast, iss := env.Compile(rule)
+// 	// if iss.Err() != nil {
+// 	// 	klog.V(1).Info(iss.Err())
+// 	// }
+// 	// // Check the output type is a string.
+// 	// if ast.OutputType() != cel.AnyType {
+// 	// 	klog.V(1).Infof(
+// 	// 		"Got %v, wanted %v result type",
+// 	// 		ast.OutputType(), cel.AnyType)
+// 	// }
+// 	// // Plan the program.
+// 	// program, err := env.Program(ast)
+// 	// klog.V(1).Info("Got cel program")
+// 	// celProg := celProgram{Program: program}
+// 	// return celProg, err
+// 	// Evaluate the program without any additional arguments.
+// 	env, err := cel.NewEnv(
+// 		cel.Variable("self", cel.MapType(cel.StringType, cel.DynType)),
+// 		cel.Function("string", cel.Overload("any_to_string", []*cel.Type{cel.DynType}, cel.StringType)))
 
-func eval(prg cel.Program,
+// 	if err != nil {
+// 		return celProgram{}, err
+// 	}
+
+// 	ast, iss := env.Compile(rule)
+// 	if iss.Err() != nil {
+// 		return celProgram{}, iss.Err()
+// 	}
+
+// 	// Program should return a string type
+// 	if ast.OutputType() != cel.StringType {
+// 		return celProgram{}, fmt.Errorf("expression must evaluate to a string, got %v", ast.OutputType())
+// 	}
+
+// 	program, err := env.Program(ast)
+// 	if err != nil {
+// 		return celProgram{}, err
+// 	}
+
+// 	return celProgram{Program: program}, nil
+// }
+
+func Eval(prg cel.Program,
 	vars any) (out ref.Val, det *cel.EvalDetails, err error) {
 	varMap, isMap := vars.(map[string]any)
 	fmt.Println("------ input ------")
@@ -150,7 +191,7 @@ func eval(prg cel.Program,
 			case proto.Message:
 				bytes, err := prototext.Marshal(val)
 				if err != nil {
-					klog.V(1).Info("failed to marshal proto to text: %v", val)
+					klog.V(1).Infof("failed to marshal proto to text: %v", val)
 				}
 				fmt.Printf("%s = %s", k, string(bytes))
 			case map[string]any:
@@ -197,7 +238,9 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 	// compResults := make([]ColumnCompilationResult, len(exprs))
 	maxCardinality := maxCardinality(declType.MinSerializedSize)
 	ruleEnvSet := oldSelfEnvSet
+	klog.V(1).Infof("\n\n ruleEnvSet: %v", ruleEnvSet)
 	compResult := compileColumnExpression(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
+	klog.V(1).Infof("\n\n compResult: %v", compResult)
 
 	return compResult, nil
 }
@@ -234,8 +277,8 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 
-	// if ast.OutputType() != cel.StringType {
-	if ast.OutputType() != cel.AnyType {
+	if ast.OutputType() != cel.StringType {
+		// if ast.OutputType() != cel.AnyType {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a string"}
 		return
 	}
@@ -264,9 +307,11 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "cost estimation failed: " + err.Error()}
 		return
 	}
+	// out, _, _ := eval(prog, s)
+	// klog.V(1).Infof("HEHEHEH Program evaluation: %v", out)
 	compilationResult.MaxCost = costEst.Max
 	compilationResult.MaxCardinality = maxCardinality
-	compilationResult.Program = prog
+	compilationResult.Program = &celProgram{Program: prog}
 	return compilationResult
 }
 
