@@ -34,6 +34,7 @@ import (
 	"k8s.io/apiserver/pkg/cel/environment"
 	"k8s.io/apiserver/pkg/cel/library"
 	"k8s.io/apiserver/pkg/cel/metrics"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -151,7 +152,12 @@ func Compile(s *schema.Structural, declType *apiservercel.DeclType, perCallLimit
 }
 
 func prepareEnvSet(baseEnvSet *environment.EnvSet, declType *apiservercel.DeclType) (oldSelfEnvSet *environment.EnvSet, optionalOldSelfEnvSet *environment.EnvSet, err error) {
+	klog.V(1).Info("Inside prepareEnvSet right now!")
 	scopedType := declType.MaybeAssignTypeName(generateUniqueSelfTypeName())
+
+	klog.V(1).Infof("scopedType: %v", scopedType)
+	klog.V(1).Infof("scopedType: %v", scopedType.CelType())
+
 
 	oldSelfEnvSet, err = baseEnvSet.Extend(
 		environment.VersionedOptions{
