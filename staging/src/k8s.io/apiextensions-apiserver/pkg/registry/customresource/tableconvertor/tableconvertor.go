@@ -203,11 +203,18 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 		for i, column := range c.additionalColumns {
 			// TODO (Sreeram/Priyanka): Comment-Nov28
 			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression
+
+			klog.V(1).Info("Going to call FindResults now!!!")
+			klog.V(1).Infof("Column: %v", column)
+
 			results, err := column.FindResults(us.UnstructuredContent())
 			if err != nil || len(results) == 0 || len(results[0]) == 0 {
 				cells = append(cells, nil)
 				continue
 			}
+
+			klog.V(1).Info("FindResults finished, going to do PrintResults now")
+			klog.V(1).Infof("FindResults result: %v", results)
 
 			// as we only support simple JSON path, we can assume to have only one result (or none, filtered out above)
 			value := results[0][0].Interface()

@@ -277,9 +277,25 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 
-	if ast.OutputType() != cel.StringType {
-		// if ast.OutputType() != cel.AnyType {
-		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a string"}
+	klog.V(1).Infof("PRINTING AST OUTPUT TYPE: %v", ast.OutputType())
+	klog.V(1).Infof("PRINTING CEL STRING TYPE: %v", cel.StringType)
+	klog.V(1).Infof("PRINTING CEL BOOL TYPE: %v", cel.BoolType)
+	klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.IntType)
+	klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.ListType(cel.IntType))
+
+	klog.V(1).Infof("ast.OutputType() == cel.StringType: %v", ast.OutputType().IsExactType(cel.StringType))
+	klog.V(1).Infof("ast.OutputType() == cel.ListType(cel.IntType): %v", ast.OutputType().IsExactType(cel.ListType(cel.IntType)))
+
+	if ast.OutputType() != cel.StringType && 
+	   ast.OutputType() != cel.BoolType && 
+	   ast.OutputType() != cel.IntType &&
+	   ast.OutputType() != cel.DoubleType &&
+	   ast.OutputType() != cel.DurationType &&
+	//    ast.OutputType() != cel.ListType(cel.IntType) &&
+	   !ast.OutputType().IsExactType(cel.ListType(cel.IntType)) &&
+	   ast.OutputType() != cel.DynType {
+		// if ast.OutputType() != cel.DynType {
+		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a valid type"}
 		return
 	}
 
