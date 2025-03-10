@@ -2381,6 +2381,9 @@ func (kl *Kubelet) convertToAPIContainerStatuses(pod *v1.Pod, podStatus *kubecon
 		if utilfeature.DefaultFeatureGate.Enabled(features.SupplementalGroupsPolicy) {
 			status.User = convertContainerStatusUser(cStatus)
 		}
+		if utilfeature.DefaultFeatureGate.Enabled(features.ContainerStopSignals) {
+			status.Lifecycle = cStatus.Lifecycle
+		}
 		if containerSeen[cName] == 0 {
 			statuses[cName] = status
 		} else {
