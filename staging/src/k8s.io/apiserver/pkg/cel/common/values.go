@@ -26,6 +26,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
 
+	"k8s.io/klog/v2"
 	"k8s.io/kube-openapi/pkg/validation/strfmt"
 
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -36,6 +37,9 @@ import (
 // The root schema of custom resource schema is expected contain type meta and object meta schemas.
 // If Embedded resources do not contain type meta and object meta schemas, they will be added automatically.
 func UnstructuredToVal(unstructured interface{}, schema Schema) ref.Val {
+	klog.Info("Printing schema type now")
+	klog.Info(schema.Type())
+	klog.Info(schema.Format())
 	if unstructured == nil {
 		if schema.Nullable() {
 			return types.NullValue

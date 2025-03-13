@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/cel/common"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/klog/v2"
 	openapierrors "k8s.io/kube-openapi/pkg/validation/errors"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 	"k8s.io/kube-openapi/pkg/validation/strfmt"
@@ -373,9 +374,14 @@ func ConvertJSONSchemaPropsWithPostProcess(in *apiextensions.JSONSchemaProps, ou
 	}
 
 	if postProcess != nil {
+		klog.Info("Printing out from inside postProcess block in ConvertJSONSchemaPropsWithPostProcess")
+		klog.Info(out)
+		klog.Info(out.SchemaProps)
 		if err := postProcess(out); err != nil {
 			return err
 		}
+		klog.Info(out)
+		klog.Info(out.SchemaProps)
 	}
 
 	if in.XPreserveUnknownFields != nil {
