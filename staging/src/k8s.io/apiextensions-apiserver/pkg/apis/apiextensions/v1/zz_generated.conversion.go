@@ -282,6 +282,7 @@ func autoConvert_v1_CustomResourceColumnDefinition_To_apiextensions_CustomResour
 	out.Description = in.Description
 	out.Priority = in.Priority
 	out.JSONPath = in.JSONPath
+	out.Expression = in.Expression
 	return nil
 }
 
@@ -297,6 +298,7 @@ func autoConvert_apiextensions_CustomResourceColumnDefinition_To_v1_CustomResour
 	out.Description = in.Description
 	out.Priority = in.Priority
 	out.JSONPath = in.JSONPath
+	out.Expression = in.Expression
 	return nil
 }
 
