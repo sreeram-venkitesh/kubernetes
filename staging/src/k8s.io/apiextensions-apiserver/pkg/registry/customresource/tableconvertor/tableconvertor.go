@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"time"
 
 	"k8s.io/klog/v2"
 
@@ -112,29 +113,35 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition, s *schema.
 		// We need to add the CEL compilation logic bit here in place of JSONPath parsing when dealing with col.Expression
 
 		if len(col.JSONPath) > 0 && len(col.Expression) == 0 {
+			start := time.Now()
 			path := jsonpath.New(col.Name)
 			if err := path.Parse(fmt.Sprintf("{%s}", col.JSONPath)); err != nil {
 				return c, fmt.Errorf("unrecognized column definition %q", col.JSONPath)
 			}
 			path.AllowMissingKeys(true)
+			duration := time.Since(start)
+			klog.Infof("Time taken for JSONPath execution %v: %s\n", col.JSONPath, duration)
+
 			c.additionalColumns = append(c.additionalColumns, path)
 		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
 			klog.V(1).Info("Inside the cel block in tableconverter.new()")
 			// prog, err := crdcel.FinalColumnCompile(col.Expression)
 
-			compResult, err := cel.CompileColumn(col.Expression, s, model.SchemaDeclType(s, true), celconfig.PerCallLimit, environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), true), cel.StoredExpressionsEnvLoader())
-			klog.V(1).Infof("HEHEHE Error in CEL program compilation in tableconvertor: %v", err)
-			klog.V(1).Infof("HEHEHE CEL program compresult in tableconvertor: %v", compResult)
-
+			start := time.Now()
+			compResult := cel.CompileColumn(col.Expression, s, model.SchemaDeclType(s, true), celconfig.PerCallLimit, environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), true), cel.StoredExpressionsEnvLoader())
+			duration := time.Since(start)
+			klog.Infof("May3: Total time for entire CEL compilation %v: %s\n", col.Expression, duration)
+			
+			klog.Infof("May 6 Error in CEL program compilation in tableconvertor: %v", compResult.Error)
+			klog.Infof("May 6 CEL program compresult in tableconvertor: %v", compResult)
 			// klog.V(1).Infof("FINAL ERROR PRINTING: %v", err)
 			// TODO (sreeram/Priyanka): Comment-Jan 6 2025
 			// TLDR path = CEL Program (prog)
 			// For JSONPath, path := jsonpath.New, similarly for CEL we're collecting the CEL prog, path := cel.CompileColumn() (function we wrote after copy pasting CompileColumns)
 			// Next thing to take care is how path currently implements findResults, printResults, we need to implement those for cel prog as well so that we can append prog to c.additionalColumns
-			// if err != nil {
-			// if err := path.Parse(fmt.Sprintf("{%s}", col.Expression)); err != nil {
-			// return c, fmt.Errorf("unrecognized column definition %q", col.Expression)
-			// }
+			if compResult.Error != nil {
+				return c, fmt.Errorf("CEL compilation error %q", compResult.Error)
+			}
 			c.additionalColumns = append(c.additionalColumns, compResult.Program)
 		}
 		// END Comment-Nov28
@@ -207,11 +214,14 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			klog.V(1).Info("Going to call FindResults now!!!")
 			klog.V(1).Infof("Column: %v", column)
 
+			start := time.Now()
 			results, err := column.FindResults(us.UnstructuredContent())
 			if err != nil || len(results) == 0 || len(results[0]) == 0 {
 				cells = append(cells, nil)
 				continue
 			}
+			duration := time.Since(start)
+			klog.Infof("Time taken for findResults for %v: %s\n", column, duration)
 
 			klog.V(1).Info("FindResults finished, going to do PrintResults now")
 			klog.V(1).Infof("FindResults result: %v", results)
@@ -221,12 +231,15 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			if customHeaders[i].Type == "string" {
 				klog.V(1).Info("Printing value we got from findResults")
 				klog.V(1).Info(value)
+				start := time.Now()
 				if err := column.PrintResults(buf, []reflect.Value{reflect.ValueOf(value)}); err == nil {
 					cells = append(cells, buf.String())
 					buf.Reset()
 				} else {
 					cells = append(cells, nil)
 				}
+				duration := time.Since(start)
+				klog.Infof("Time taken for printResults for %v: %s\n", column, duration)
 			} else {
 				// TODO (Sreeram/Priyanka): Comment-Nov28
 				// Figure out cellForJSONValue function and if we need an equivalent cellForCELValue function

@@ -946,11 +946,11 @@ func ValidateCustomResourceColumnDefinition(ctx context.Context, customResourceV
 			klog.V(1).Infof("perCallLimit: %v", celconfig.PerCallLimit)
 			klog.V(1).Infof("baseEnvSet: %v", opts.celEnvironmentSet)
 			klog.V(1).Infof("envLoader: %v", opts.preexistingExpressions)
-			compResult, err := cel.CompileColumn(col.Expression, celContext.typeInfo.Schema, celContext.typeInfo.DeclType, celconfig.PerCallLimit, opts.celEnvironmentSet, opts.preexistingExpressions)
+			compResult := cel.CompileColumn(col.Expression, celContext.typeInfo.Schema, celContext.typeInfo.DeclType, celconfig.PerCallLimit, opts.celEnvironmentSet, opts.preexistingExpressions)
 
-			if err != nil {
-				klog.V(1).Infof("Error at CEL expression vaidation: %v", err)
-				allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("CEL compilation failed for %s rules: %s", col.Expression, err)))
+			if compResult.Error != nil {
+				klog.V(1).Infof("Error at CEL expression vaidation: %v", compResult.Error)
+				allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("CEL compilation failed for %s rules: %s", col.Expression, compResult.Error)))
 			}
 			klog.V(1).Infof("CEL compile result: %v", compResult)
 
