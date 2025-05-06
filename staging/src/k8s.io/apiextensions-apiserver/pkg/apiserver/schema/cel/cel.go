@@ -6,6 +6,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"time"
 
 	// "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	// "k8s.io/apimachinery/pkg/util/validation/field"
@@ -219,9 +220,8 @@ func Eval(prg cel.Program,
 // We uncommented CompileColumn and compileColumn to use in the validation for the cel expression
 // but we haven't implemented it as of now. We have uncommented these functions and resolved all errors
 // that were shown in THIS file.
-func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) (ColumnCompilationResult, error) {
+func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.DeclType, perCallLimit uint64, baseEnvSet *environment.EnvSet, envLoader EnvLoader) ColumnCompilationResult {
 
-	klog.V(1).Infof("HII reached here!")
 	klog.V(1).Infof("expr: %v", expr)
 	klog.V(1).Infof("schema: %v", s)
 	klog.V(1).Infof("declType: %v", declType)
@@ -229,20 +229,33 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 	klog.V(1).Infof("baseEnvSet: %v", baseEnvSet)
 	klog.V(1).Infof("envLoader: %v", envLoader)
 
+	// INFO (PS): oldSelfEnvSet might be required only in the context of CRD Validation Ratcheting
+	// where we use both oldSelf and self to calculate the diff between the old crd and new crd to
+	// decide what all fields we need to validate.
+	// TODO: If needed go through the ratcheting KEP and its alpha PRs to confirm if oldSelfEnvSet logic was
+	// added as part of the ratcheting KEP.
+
+	start := time.Now()
 	oldSelfEnvSet, _, err := prepareEnvSet(baseEnvSet, declType)
 	if err != nil {
-		return ColumnCompilationResult{}, err
+		compResult := ColumnCompilationResult{Error: err}
+		return compResult
 	}
 	estimator := newCostEstimator(declType)
 	// compResults is the return value which saves a list of compilation results in the same order as x-kubernetes-validations rules.
 	// compResults := make([]ColumnCompilationResult, len(exprs))
 	maxCardinality := maxCardinality(declType.MinSerializedSize)
 	ruleEnvSet := oldSelfEnvSet
-	klog.V(1).Infof("\n\n ruleEnvSet: %v", ruleEnvSet)
-	compResult := compileColumnExpression(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
-	klog.V(1).Infof("\n\n compResult: %v", compResult)
+	duration := time.Since(start)
 
-	return compResult, nil
+	klog.Infof("May3: Time 1: Time taken for costEstimator for %s: %s\n", expr, duration)
+	// klog.V(1).Infof("\n\n ruleEnvSet: %v", ruleEnvSet)
+	compResult := compileColumnExpression(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
+	// klog.V(1).Infof("\n\n compResult: %v", compResult)
+	if compResult.Error != nil {
+		return compResult
+	}
+	return compResult
 }
 
 // // End of comment-Jan 06
@@ -271,44 +284,61 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 	ruleEnv := envLoader.RuleEnv(envSet, rule)
+	start := time.Now()
 	ast, issues := ruleEnv.Compile(rule)
+	duration := time.Since(start)
+	klog.Infof("May3: Time2: Time taken for CEL compilation for %s: %s\n", rule, duration)
+
 	if issues != nil {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "compilation failed: " + issues.String()}
 		return
 	}
 
-	klog.V(1).Infof("PRINTING AST OUTPUT TYPE: %v", ast.OutputType())
-	klog.V(1).Infof("PRINTING CEL STRING TYPE: %v", cel.StringType)
-	klog.V(1).Infof("PRINTING CEL BOOL TYPE: %v", cel.BoolType)
-	klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.IntType)
-	klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.ListType(cel.IntType))
+	// klog.V(1).Infof("PRINTING AST OUTPUT TYPE: %v", ast.OutputType())
+	// klog.V(1).Infof("PRINTING CEL STRING TYPE: %v", cel.StringType)
+	// klog.V(1).Infof("PRINTING CEL BOOL TYPE: %v", cel.BoolType)
+	// klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.IntType)
+	// klog.V(1).Infof("PRINTING CEL INT TYPE: %v", cel.ListType(cel.IntType))
 
-	klog.V(1).Infof("ast.OutputType() == cel.StringType: %v", ast.OutputType().IsExactType(cel.StringType))
-	klog.V(1).Infof("ast.OutputType() == cel.ListType(cel.IntType): %v", ast.OutputType().IsExactType(cel.ListType(cel.IntType)))
+	// klog.V(1).Infof("ast.OutputType() == cel.StringType: %v", ast.OutputType().IsExactType(cel.StringType))
+	// klog.V(1).Infof("ast.OutputType() == cel.ListType(cel.IntType): %v", ast.OutputType().IsExactType(cel.ListType(cel.IntType)))
 
-	if ast.OutputType() != cel.StringType && 
-	   ast.OutputType() != cel.BoolType && 
-	   ast.OutputType() != cel.IntType &&
-	   ast.OutputType() != cel.DoubleType &&
-	   ast.OutputType() != cel.DurationType &&
-	//    ast.OutputType() != cel.ListType(cel.IntType) &&
-	   !ast.OutputType().IsExactType(cel.ListType(cel.IntType)) &&
-	   ast.OutputType() != cel.DynType {
+	start = time.Now()
+	klog.Infof("printing ast.outputType %s", ast.OutputType())
+	if ast.OutputType() != cel.StringType &&
+		ast.OutputType() != cel.BoolType &&
+		ast.OutputType() != cel.IntType &&
+		// ast.OutputType() != cel.DoubleType &&
+		// ast.OutputType() != cel.DurationType &&
+		//    ast.OutputType() != cel.ListType(cel.IntType) &&
+		!ast.OutputType().IsExactType(cel.ListType(cel.IntType)) &&
+		!ast.OutputType().IsExactType(cel.ListType(cel.StringType)) &&
+		// !ast.OutputType().IsExactType(cel.ListType(cel.DynType)) &&
+		// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
+		// !ast.OutputType().IsExactType(cel.ListType()) &&
+		// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
+		ast.OutputType() != cel.DynType {
 		// if ast.OutputType() != cel.DynType {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a valid type"}
 		return
 	}
+	duration = time.Since(start)
+	klog.Infof("May3: Time3: Time taken for if chain in CEL compilation function for %s: %s\n", rule, duration)
 
+	start = time.Now()
 	_, err := cel.AstToCheckedExpr(ast)
 	if err != nil {
 		// should be impossible since env.Compile returned no issues
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "unexpected compilation error: " + err.Error()}
 		return
 	}
+	duration = time.Since(start)
+	klog.Infof("May3: Time4: Time taken for astToCheckedExpr for %s: %s\n", rule, duration)
 
 	// TODO: Ideally we could configure the per expression limit at validation time and
 	// set it to the remaining overall budget, but we would either need a way to pass in
 	// a limit at evaluation time or move program creation to validation time
+	start = time.Now()
 	prog, err := ruleEnv.Program(ast,
 		cel.CostLimit(perCallLimit),
 		cel.CostTracking(estimator),
@@ -318,11 +348,17 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "program instantiation failed: " + err.Error()}
 		return
 	}
+	duration = time.Since(start)
+	klog.Infof("May3: Time5: Time taken for program generation for %s: %s\n", rule, duration)
+
+	start = time.Now()
 	costEst, err := ruleEnv.EstimateCost(ast, estimator)
 	if err != nil {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInternal, Detail: "cost estimation failed: " + err.Error()}
 		return
 	}
+	duration = time.Since(start)
+	klog.Infof("May3: Time6: Time taken for cost estimation for %s: %s\n", rule, duration)
 	// out, _, _ := eval(prog, s)
 	// klog.V(1).Infof("HEHEHEH Program evaluation: %v", out)
 	compilationResult.MaxCost = costEst.Max
