@@ -75,6 +75,47 @@ func Test_cellForJSONValue(t *testing.T) {
 	}
 }
 
+func Benchmark_convertor_ConvertToTable(b *testing.B) {
+	c := &convertor{
+		headers: []metav1.TableColumnDefinition{
+			{Name: "name", Type: "string"},
+			{Name: "valueOnly", Type: "string"},
+			{Name: "single1", Type: "string"},
+			{Name: "single2", Type: "string"},
+			{Name: "multi", Type: "string"},
+		},
+		additionalColumns: []columnPrinter{
+			newJSONPath("valueOnly", "{.spec.servers[0].hosts[0]}"),
+			newJSONPath("single1", "{.spec.servers[0].hosts}"),
+			newJSONPath("single2", "{.spec.servers[1].hosts}"),
+			newJSONPath("multi", "{.spec.servers[*].hosts}"),
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.istio.io/v1alpha1",
+			"kind":       "Blah",
+			"metadata": map[string]interface{}{
+				"name": "blah",
+			},
+			"spec": map[string]interface{}{
+				"servers": []map[string]interface{}{
+					{"hosts": []string{"foo"}},
+					{"hosts": []string{"bar", "baz"}},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = c.ConvertToTable(ctx, obj, nil)
+	}
+}
+
 func Test_convertor_ConvertToTable(t *testing.T) {
 	type fields struct {
 		headers           []metav1.TableColumnDefinition

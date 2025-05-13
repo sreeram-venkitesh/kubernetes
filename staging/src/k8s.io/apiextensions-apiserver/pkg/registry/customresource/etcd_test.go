@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metainternal "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -90,7 +91,7 @@ func newStorage(t *testing.T) (customresource.CustomResourceStorage, *etcd3testi
 		{Name: "Float64", Type: "number", JSONPath: ".spec.float64"},
 		{Name: "Bool", Type: "boolean", JSONPath: ".spec.bool"},
 	}
-	table, _ := tableconvertor.New(headers)
+	table, _ := tableconvertor.New(headers, &structuralschema.Structural{})
 
 	storage, err := customresource.NewStorage(
 		groupResource,
