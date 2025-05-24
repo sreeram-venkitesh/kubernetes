@@ -245,7 +245,9 @@ type CustomResourceColumnDefinition struct {
 	Priority int32 `json:"priority,omitempty" protobuf:"bytes,5,opt,name=priority"`
 	// jsonPath is a simple JSON path (i.e. with array notation) which is evaluated against
 	// each custom resource to produce the value for this column.
-	JSONPath string `json:"jsonPath" protobuf:"bytes,6,opt,name=jsonPath"`
+	JSONPath string `json:"jsonPath,omitempty" protobuf:"bytes,6,opt,name=jsonPath"`
+
+	Expression string `json:"expression,omitempty" protobuf:"bytes,7,opt,name=expression"`
 }
 
 // CustomResourceDefinitionNames indicates the names to serve this CustomResourceDefinition
