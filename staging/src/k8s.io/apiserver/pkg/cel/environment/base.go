@@ -183,6 +183,12 @@ var baseOptsWithoutStrictCost = []VersionedOptions{
 			library.SemverLib(library.SemverVersion(1)),
 		},
 	},
+	{
+		IntroducedVersion: version.MajorMinor(1, 33),
+		EnvOptions: []cel.EnvOption{
+			UnversionedLib(library.Lists),
+		},
+	},
 }
 
 var (

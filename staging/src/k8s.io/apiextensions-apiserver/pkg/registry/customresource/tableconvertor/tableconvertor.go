@@ -124,16 +124,16 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition, s *schema.
 
 			c.additionalColumns = append(c.additionalColumns, path)
 		} else if len(col.Expression) > 0 && len(col.JSONPath) == 0 {
-			klog.V(1).Info("Inside the cel block in tableconverter.new()")
+			// klog.V(1).Info("Inside the cel block in tableconverter.new()")
 			// prog, err := crdcel.FinalColumnCompile(col.Expression)
 
 			start := time.Now()
 			compResult := cel.CompileColumn(col.Expression, s, model.SchemaDeclType(s, true), celconfig.PerCallLimit, environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), true), cel.StoredExpressionsEnvLoader())
 			duration := time.Since(start)
-			klog.Infof("May3: Total time for entire CEL compilation %v: %s\n", col.Expression, duration)
+			klog.Infof("Time 6: Total time taken for entire CEL compilation %v: %s\n", col.Expression, duration)
 			
-			klog.Infof("May 6 Error in CEL program compilation in tableconvertor: %v", compResult.Error)
-			klog.Infof("May 6 CEL program compresult in tableconvertor: %v", compResult)
+			// klog.Infof("May 6 Error in CEL program compilation in tableconvertor: %v", compResult.Error)
+			// klog.Infof("May 6 CEL program compresult in tableconvertor: %v", compResult)
 			// klog.V(1).Infof("FINAL ERROR PRINTING: %v", err)
 			// TODO (sreeram/Priyanka): Comment-Jan 6 2025
 			// TLDR path = CEL Program (prog)
@@ -142,7 +142,7 @@ func New(crdColumns []apiextensionsv1.CustomResourceColumnDefinition, s *schema.
 			if compResult.Error != nil {
 				return c, fmt.Errorf("CEL compilation error %q", compResult.Error)
 			}
-			c.additionalColumns = append(c.additionalColumns, compResult.Program)
+			c.additionalColumns = append(c.additionalColumns, compResult)
 		}
 		// END Comment-Nov28
 
@@ -211,8 +211,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			// TODO (Sreeram/Priyanka): Comment-Nov28
 			// We need to add the evaluation logic for compiled CEL expressions here in place of JSONPath equivalent of FindResults and PrintResults when dealing with col.Expression
 
-			klog.V(1).Info("Going to call FindResults now!!!")
-			klog.V(1).Infof("Column: %v", column)
+			// klog.V(1).Info("Going to call FindResults now!!!")
+			// klog.V(1).Infof("Column: %v", column)
 
 			start := time.Now()
 			results, err := column.FindResults(us.UnstructuredContent())
@@ -223,8 +223,8 @@ func (c *convertor) ConvertToTable(ctx context.Context, obj runtime.Object, tabl
 			duration := time.Since(start)
 			klog.Infof("Time taken for findResults for %v: %s\n", column, duration)
 
-			klog.V(1).Info("FindResults finished, going to do PrintResults now")
-			klog.V(1).Infof("FindResults result: %v", results)
+			// klog.V(1).Info("FindResults finished, going to do PrintResults now")
+			// klog.V(1).Infof("FindResults result: %v", results)
 
 			// as we only support simple JSON path, we can assume to have only one result (or none, filtered out above)
 			value := results[0][0].Interface()
