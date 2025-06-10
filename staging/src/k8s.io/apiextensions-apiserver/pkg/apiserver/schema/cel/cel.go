@@ -37,19 +37,18 @@ type ColumnCompilationResult struct {
 	MaxCost        uint64
 	MaxCardinality uint64
 	FieldPath      *field.Path
-	// Program        cel.Program
-	Program *celProgram
+	Program        cel.Program
 }
 
-type celProgram struct {
-	Program cel.Program
-}
+// type celProgram struct {
+// 	Program cel.Program
+// }
 
-func (c celProgram) FindResults(data interface{}) ([][]reflect.Value, error) {
+func (c ColumnCompilationResult) FindResults(data interface{}) ([][]reflect.Value, error) {
 	klog.V(1).Info("Inside FindResults of cel")
 	// out, det, err := Eval(c.Program, cel.NoVars())
 
-	// activationFactory, _ := validationActivationWithoutOldSelf(data.(*schema.Structural), nil, nil)
+	// activation, _ := validationActivationWithoutOldSelf(data.(*schema.Structural), nil, nil)
 	klog.V(1).Info(data)
 	vars := map[string]interface{}{
 		"self": data,
@@ -77,7 +76,7 @@ func (c celProgram) FindResults(data interface{}) ([][]reflect.Value, error) {
 	return reflectSlice, nil
 }
 
-func (c celProgram) PrintResults(w io.Writer, results []reflect.Value) error {
+func (c ColumnCompilationResult) PrintResults(w io.Writer, results []reflect.Value) error {
 	// return errors.New("this is an error")
 	// Iterate over the reflect.Values in the results slice
 	klog.V(1).Info("Inside cel PrintResults")
@@ -248,7 +247,7 @@ func CompileColumn(expr string, s *schema.Structural, declType *apiservercel.Dec
 	ruleEnvSet := oldSelfEnvSet
 	duration := time.Since(start)
 
-	klog.Infof("May3: Time 1: Time taken for costEstimator for %s: %s\n", expr, duration)
+	klog.Infof("Time 1: Time taken for setting up env and cost estimator for %s: %s\n", expr, duration)
 	// klog.V(1).Infof("\n\n ruleEnvSet: %v", ruleEnvSet)
 	compResult := compileColumnExpression(s, expr, ruleEnvSet, envLoader, estimator, maxCardinality, perCallLimit)
 	// klog.V(1).Infof("\n\n compResult: %v", compResult)
@@ -287,7 +286,7 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 	start := time.Now()
 	ast, issues := ruleEnv.Compile(rule)
 	duration := time.Since(start)
-	klog.Infof("May3: Time2: Time taken for CEL compilation for %s: %s\n", rule, duration)
+	klog.Infof("Time 2: Time taken for CEL compilation for %s: %s\n", rule, duration)
 
 	if issues != nil {
 		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "compilation failed: " + issues.String()}
@@ -303,27 +302,29 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 	// klog.V(1).Infof("ast.OutputType() == cel.StringType: %v", ast.OutputType().IsExactType(cel.StringType))
 	// klog.V(1).Infof("ast.OutputType() == cel.ListType(cel.IntType): %v", ast.OutputType().IsExactType(cel.ListType(cel.IntType)))
 
-	start = time.Now()
-	klog.Infof("printing ast.outputType %s", ast.OutputType())
-	if ast.OutputType() != cel.StringType &&
-		ast.OutputType() != cel.BoolType &&
-		ast.OutputType() != cel.IntType &&
-		// ast.OutputType() != cel.DoubleType &&
-		// ast.OutputType() != cel.DurationType &&
-		//    ast.OutputType() != cel.ListType(cel.IntType) &&
-		!ast.OutputType().IsExactType(cel.ListType(cel.IntType)) &&
-		!ast.OutputType().IsExactType(cel.ListType(cel.StringType)) &&
-		// !ast.OutputType().IsExactType(cel.ListType(cel.DynType)) &&
-		// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
-		// !ast.OutputType().IsExactType(cel.ListType()) &&
-		// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
-		ast.OutputType() != cel.DynType {
-		// if ast.OutputType() != cel.DynType {
-		compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a valid type"}
-		return
-	}
-	duration = time.Since(start)
-	klog.Infof("May3: Time3: Time taken for if chain in CEL compilation function for %s: %s\n", rule, duration)
+	// start = time.Now()
+	// klog.Infof("MAY16 printing ast.outputType %s", ast.OutputType())
+	// klog.Infof("MAY16 printing unstructuredToVal %s", UnstructuredToVal(nil, s))
+
+	// if ast.OutputType() != cel.StringType &&
+	// 	ast.OutputType() != cel.BoolType &&
+	// 	ast.OutputType() != cel.IntType &&
+	// 	// ast.OutputType() != cel.DoubleType &&
+	// 	// ast.OutputType() != cel.DurationType &&
+	// 	//    ast.OutputType() != cel.ListType(cel.IntType) &&
+	// 	!ast.OutputType().IsExactType(cel.ListType(cel.IntType)) &&
+	// 	!ast.OutputType().IsExactType(cel.ListType(cel.StringType)) &&
+	// 	// !ast.OutputType().IsExactType(cel.ListType(cel.DynType)) &&
+	// 	// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
+	// 	// !ast.OutputType().IsExactType(cel.ListType()) &&
+	// 	// !ast.OutputType().IsExactType(cel.ListType(cel.MapType(cel.StringType, cel.StringType))) &&
+	// 	ast.OutputType() != cel.DynType {
+	// 	// if ast.OutputType() != cel.DynType {
+	// 	compilationResult.Error = &apiservercel.Error{Type: apiservercel.ErrorTypeInvalid, Detail: "cel expression must evaluate to a valid type"}
+	// 	return
+	// }
+	// duration = time.Since(start)
+	// klog.Infof("Time3: Time taken for if chain in CEL compilation function for %s: %s\n", rule, duration)
 
 	start = time.Now()
 	_, err := cel.AstToCheckedExpr(ast)
@@ -333,7 +334,7 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 	duration = time.Since(start)
-	klog.Infof("May3: Time4: Time taken for astToCheckedExpr for %s: %s\n", rule, duration)
+	klog.Infof("Time 3: Time taken for astToCheckedExpr for %s: %s\n", rule, duration)
 
 	// TODO: Ideally we could configure the per expression limit at validation time and
 	// set it to the remaining overall budget, but we would either need a way to pass in
@@ -349,7 +350,7 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 	duration = time.Since(start)
-	klog.Infof("May3: Time5: Time taken for program generation for %s: %s\n", rule, duration)
+	klog.Infof("Time 4: Time taken for program generation for %s: %s\n", rule, duration)
 
 	start = time.Now()
 	costEst, err := ruleEnv.EstimateCost(ast, estimator)
@@ -358,12 +359,12 @@ func compileColumnExpression(s *schema.Structural, rule string, envSet *environm
 		return
 	}
 	duration = time.Since(start)
-	klog.Infof("May3: Time6: Time taken for cost estimation for %s: %s\n", rule, duration)
+	klog.Infof("Time 5: Time taken for cost estimation for %s: %s\n", rule, duration)
 	// out, _, _ := eval(prog, s)
 	// klog.V(1).Infof("HEHEHEH Program evaluation: %v", out)
 	compilationResult.MaxCost = costEst.Max
 	compilationResult.MaxCardinality = maxCardinality
-	compilationResult.Program = &celProgram{Program: prog}
+	compilationResult.Program = prog
 	return compilationResult
 }
 
