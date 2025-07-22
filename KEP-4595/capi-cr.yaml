@@ -1,0 +1,51 @@
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfig
+metadata:
+  name: controlplane-config-0
+  namespace: default
+  labels:
+    cluster: "cluster0"
+spec:
+  initConfiguration:
+    nodeRegistration:
+      kubeletExtraArgs:
+        evictionHard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+  bootCommands: ["bin/sh", "ls", "echo hello"]
+  files:
+    - path: "test-file"
+      contentFrom:
+        secret: 
+          key: "abcd"
+          name: "test"
+    - path: "test-file"
+      contentFrom:
+        secret: 
+          key: "4565"
+          name: "test"
+
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+kind: KubeadmConfig
+metadata:
+  name: controlplane-config-1
+  namespace: default
+  labels: 
+    cluster: "cluster1"
+spec:
+  initConfiguration:
+    nodeRegistration:
+      kubeletExtraArgs:
+        evictionHard: "test eviction"
+  bootCommands: ["bin/bash", "ps -aef"]
+  files:
+    - path: "test-file"
+      contentFrom:
+        secret: 
+          key: "12345"
+          name: "test-secret"
+    - path: "test-file"
+      contentFrom:
+        secret: 
+          key: "0000"
+          name: "abced"
