@@ -24,11 +24,14 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/jsonpath"
+	"k8s.io/klog/v2"
 )
 
 func Test_cellForJSONValue(t *testing.T) {
@@ -72,6 +75,372 @@ func Test_cellForJSONValue(t *testing.T) {
 				t.Errorf("cellForJSONValue() = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func BenchmarkNew_CEL_DeepComplex(b *testing.B) {
+	crdColumns := []apiextensionsv1.CustomResourceColumnDefinition{
+		{
+			Name:       "highUtilNodes",
+			Type:       "string",
+			// Expression: `self.spec.environments.all(e, e.clusters.all(c, c.nodes.any(n, n.metrics.cpu > 90 && n.metrics.memory > 8000 && n.status == "Ready"))).clusters.nodes.id`,
+			// Or a correct CEL expression to filter nodes accordingly
+			// (example below)
+			Expression: `self.spec.environments[].clusters[].nodes[exists(n, n.metrics.cpu > 90 && n.metrics.memory > 8000 && n.status == "Ready")].id`,
+			// Adjust expression as needed for correctness
+		},
+	}
+
+	s := validStructuralSchemaDeepComplex()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.io/v1",
+			"kind":       "Complex",
+			"metadata": map[string]interface{}{
+				"name": "example",
+			},
+			"spec": map[string]interface{}{
+				"environments": []map[string]interface{}{
+					{
+						"clusters": []map[string]interface{}{
+							{
+								"nodes": []map[string]interface{}{
+									{
+										"id":     "node-1",
+										"status": "Ready",
+										"metrics": map[string]interface{}{
+											"cpu":    91,
+											"memory": 8192,
+										},
+									},
+									{
+										"id":     "node-2",
+										"status": "NotReady",
+										"metrics": map[string]interface{}{
+											"cpu":    75,
+											"memory": 4096,
+										},
+									},
+								},
+							},
+							{
+								"nodes": []map[string]interface{}{
+									{
+										"id":     "node-3",
+										"status": "Ready",
+										"metrics": map[string]interface{}{
+											"cpu":    95,
+											"memory": 16000,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	convertor, err := New(crdColumns, s)
+	if err != nil {
+		b.Fatalf("Unexpected error creating convertor: %v", err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = convertor.ConvertToTable(ctx, obj, nil)
+
+		if err != nil {
+			b.Fatalf("Unexpected error converting to table: %v", err)
+		}
+	}
+}
+
+func BenchmarkNew_JSONPath_DeepComplex(b *testing.B) {
+	crdColumns := []apiextensionsv1.CustomResourceColumnDefinition{
+		{
+			Name:     "highUtilNodes",
+			Type:     "string",
+			JSONPath: `$.spec.environments[*].clusters[*].nodes[?(@.metrics.memory > 8000)].id`,
+		},
+	}
+	s := validStructuralSchemaDeepComplex()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.io/v1",
+			"kind":       "Complex",
+			"metadata": map[string]interface{}{
+				"name": "example",
+			},
+			"spec": map[string]interface{}{
+				"environments": []map[string]interface{}{
+					{
+						"clusters": []map[string]interface{}{
+							{
+								"nodes": []map[string]interface{}{
+									{
+										"id":     "node-1",
+										"status": "Ready",
+										"metrics": map[string]interface{}{
+											"cpu":    91,
+											"memory": 8192,
+										},
+									},
+									{
+										"id":     "node-2",
+										"status": "NotReady",
+										"metrics": map[string]interface{}{
+											"cpu":    75,
+											"memory": 4096,
+										},
+									},
+								},
+							},
+							{
+								"nodes": []map[string]interface{}{
+									{
+										"id":     "node-3",
+										"status": "Ready",
+										"metrics": map[string]interface{}{
+											"cpu":    95,
+											"memory": 16000,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	convertor, err := New(crdColumns, s)
+	if err != nil {
+		b.Fatalf("Unexpected error creating convertor: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = convertor.ConvertToTable(ctx, obj, nil)
+		if b.Elapsed() > 9 {
+			klog.Info(b.Elapsed())
+			klog.Info("Above 9!")
+		}
+		if err != nil {
+			b.Fatalf("Unexpected error converting to table: %v", err)
+		}
+	}
+}
+
+func validStructuralSchemaDeepComplex() *schema.Structural {
+	return &schema.Structural{
+		Generic: schema.Generic{
+			Type: "object",
+		},
+		Properties: map[string]schema.Structural{
+			"spec": {
+				Generic: schema.Generic{
+					Type: "object",
+				},
+				Properties: map[string]schema.Structural{
+					"environments": {
+						Generic: schema.Generic{
+							Type: "array",
+						},
+						Items: &schema.Structural{
+							Generic: schema.Generic{
+								Type: "object",
+							},
+							Properties: map[string]schema.Structural{
+								"clusters": {
+									Generic: schema.Generic{
+										Type: "array",
+									},
+									Items: &schema.Structural{
+										Generic: schema.Generic{
+											Type: "object",
+										},
+										Properties: map[string]schema.Structural{
+											"nodes": {
+												Generic: schema.Generic{
+													Type: "array",
+												},
+												Items: &schema.Structural{
+													Generic: schema.Generic{
+														Type: "object",
+													},
+													Properties: map[string]schema.Structural{
+														"id": {
+															Generic: schema.Generic{
+																Type: "string",
+															},
+														},
+														"status": {
+															Generic: schema.Generic{
+																Type: "string",
+															},
+														},
+														"metrics": {
+															Generic: schema.Generic{
+																Type: "object",
+															},
+															Properties: map[string]schema.Structural{
+																"cpu": {
+																	Generic: schema.Generic{
+																		Type: "integer",
+																	},
+																},
+																"memory": {
+																	Generic: schema.Generic{
+																		Type: "integer",
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func Benchmark_CEL_Evaluation(b *testing.B) {
+	crdColumns := []apiextensionsv1.CustomResourceColumnDefinition{
+		{
+			Name:       "celHosts",
+			Type:       "string",
+			Expression: `self.spec.servers.map(s, s.hosts.filter(h, h == "prod.example.com"))`,
+		},
+	}
+	s := validStructuralSchema()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.istio.io/v1alpha1",
+			"kind":       "Blah",
+			"metadata": map[string]interface{}{
+				"name": "blah",
+			},
+			"spec": map[string]interface{}{
+				"servers": []map[string]interface{}{
+					{"hosts": []string{"prod.example.com", "foo"}},
+					{"hosts": []string{"bar", "baz"}},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	convertor, err := New(crdColumns, s)
+	if err != nil {
+		b.Fatalf("Unexpected error creating convertor: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = convertor.ConvertToTable(ctx, obj, nil)
+		if err != nil {
+			b.Fatalf("Unexpected error converting to table: %v", err)
+		}
+	}
+}
+
+func Benchmark_JSONPath_Evaluation(b *testing.B) {
+	crdColumns := []apiextensionsv1.CustomResourceColumnDefinition{
+		{
+			Name:     "jsonPathHosts",
+			Type:     "string",
+			JSONPath: `.spec.servers[*].hosts[?(@ == "prod.example.com")]`,
+		},
+	}
+	s := validStructuralSchema()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.istio.io/v1alpha1",
+			"kind":       "Blah",
+			"metadata": map[string]interface{}{
+				"name": "blah",
+			},
+			"spec": map[string]interface{}{
+				"servers": []map[string]interface{}{
+					{"hosts": []string{"prod.example.com", "foo"}},
+					{"hosts": []string{"bar", "baz"}},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	convertor, err := New(crdColumns, s)
+	if err != nil {
+		b.Fatalf("Unexpected error creating convertor: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = convertor.ConvertToTable(ctx, obj, nil)
+		if err != nil {
+			b.Fatalf("Unexpected error converting to table: %v", err)
+		}
+	}
+}
+
+func Benchmark_convertor_ConvertToTable(b *testing.B) {
+	c := &convertor{
+		headers: []metav1.TableColumnDefinition{
+			{Name: "name", Type: "string"},
+			{Name: "valueOnly", Type: "string"},
+			{Name: "single1", Type: "string"},
+			{Name: "single2", Type: "string"},
+			{Name: "multi", Type: "string"},
+		},
+		additionalColumns: []columnPrinter{
+			newJSONPath("valueOnly", "{.spec.servers[0].hosts[0]}"),
+			newJSONPath("single1", "{.spec.servers[0].hosts}"),
+			newJSONPath("single2", "{.spec.servers[1].hosts}"),
+			newJSONPath("multi", "{.spec.servers[*].hosts}"),
+		},
+	}
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "example.istio.io/v1alpha1",
+			"kind":       "Blah",
+			"metadata": map[string]interface{}{
+				"name": "blah",
+			},
+			"spec": map[string]interface{}{
+				"servers": []map[string]interface{}{
+					{"hosts": []string{"foo"}},
+					{"hosts": []string{"bar", "baz"}},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = c.ConvertToTable(ctx, obj, nil)
 	}
 }
 
@@ -437,6 +806,45 @@ func Test_convertor_ConvertToTable(t *testing.T) {
 				t.Errorf("convertor.ConvertToTable() = %s", cmp.Diff(tt.want, got))
 			}
 		})
+	}
+}
+
+func validStructuralSchema() *schema.Structural {
+	return &schema.Structural{
+		Generic: schema.Generic{
+			Type: "object",
+		},
+		Properties: map[string]schema.Structural{
+			"spec": {
+				Generic: schema.Generic{
+					Type: "object",
+				},
+				Properties: map[string]schema.Structural{
+					"servers": {
+						Generic: schema.Generic{
+							Type: "array",
+						},
+						Items: &schema.Structural{
+							Generic: schema.Generic{
+								Type: "object",
+							},
+							Properties: map[string]schema.Structural{
+								"hosts": {
+									Generic: schema.Generic{
+										Type: "array",
+									},
+									Items: &schema.Structural{
+										Generic: schema.Generic{
+											Type: "string",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
